@@ -1,0 +1,19 @@
+meta {
+  name: Dev By Query Selector
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/api/orders?env=dev
+  body: none
+  auth: none
+}
+
+params:query {
+  env: dev
+}
+
+headers {
+  Accept: application/json
+}

@@ -1,0 +1,12 @@
+{
+  "name": "kong-plugin-upstream-env-selector-functional-tests",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Mocha functional tests for upstream-env-selector plugin",
+  "scripts": {
+    "test:functional": "mocha --timeout 30000 \"test/functional/mocha/**/*.js\""
+  },
+  "devDependencies": {
+    "mocha": "^10.8.2"
+  }
+}

@@ -1,0 +1,42 @@
+_format_version: "3.0"
+_transform: true
+
+services:
+- name: orders-gateway-service
+  host: orders-api-prod-upstream
+  port: 80
+  protocol: http
+  routes:
+  - name: orders-api-route
+    paths:
+    - /api/orders
+
+upstreams:
+- name: orders-api-dev-upstream
+  targets:
+  - target: orders_api_dev:8080
+- name: orders-api-prod-upstream
+  targets:
+  - target: orders_api_prod:8080
+
+plugins:
+- name: upstream-env-selector
+  service: orders-gateway-service
+  config:
+    use_redis: false
+    upstream_header_name: X-Upstream-Env
+    strict: true
+    normalize: true
+    client_id_source: header
+    client_id_header_name: X-Consumer-Id
+    upstreams:
+      dev: orders-api-dev-upstream
+      prod: orders-api-prod-upstream
+    access_policy:
+      sni: false
+      header_name: X-Client-Env
+      query_param_name: env
+    endpoint:
+      sni: false
+      header_name: X-Resource-Env
+      query_param_name: resource_env

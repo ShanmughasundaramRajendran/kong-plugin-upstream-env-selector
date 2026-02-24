@@ -1,0 +1,16 @@
+meta {
+  name: Prod By Default Header
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-Upstream-Env: prod
+}

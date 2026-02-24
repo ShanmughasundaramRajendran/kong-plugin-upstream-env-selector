@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pongo
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y docker.io docker-compose
+          sudo curl -L https://github.com/Kong/kong-pongo/releases/latest/download/pongo_linux_amd64 -o /usr/local/bin/pongo
+          sudo chmod +x /usr/local/bin/pongo
+      - name: Run unit tests
+        run: |
+          pongo up
+          make test

@@ -1,0 +1,16 @@
+meta {
+  name: Dev By Consumer Id Header
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-Consumer-Id: {{consumer_id}}
+}
