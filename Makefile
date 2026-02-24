@@ -1,6 +1,6 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
-.PHONY: help test test-integration test-pongo test-functional test-all lint npm-install package compose-up compose-up-redis compose-down seed-redis demo compose-build
+.PHONY: help test test-integration test-pongo test-functional test-all lint npm-install package compose-up compose-up-redis compose-down pongo-down seed-redis demo compose-build
 
 PONGO ?= pongo
 PONGO_KONG_IMAGE ?= kong/kong-gateway:latest
@@ -20,7 +20,8 @@ help:
 	@echo "  make compose-build      - build local Kong image (Kong latest + lua-resty-redis)"
 	@echo "  make compose-up         - start local demo with docker-compose (static mode)"
 	@echo "  make compose-up-redis   - start local demo with docker-compose (redis mode)"
-	@echo "  make compose-down       - stop local demo"
+	@echo "  make compose-down       - stop local demo + pongo env and remove all containers/images"
+	@echo "  make pongo-down         - stop pongo env and remove all containers/images"
 	@echo "  make seed-redis         - seed redis keys for redis mode demo"
 	@echo "  make demo               - run a few curl requests against local demo"
 	@echo ""
@@ -80,6 +81,14 @@ compose-up-redis:
 
 compose-down:
 	@docker compose down -v --remove-orphans
+	-@$(PONGO) down
+	-@docker ps -aq | xargs -r docker rm -f
+	-@docker images -q | xargs -r docker rmi -f
+
+pongo-down:
+	@$(PONGO) down
+	-@docker ps -aq | xargs -r docker rm -f
+	-@docker images -q | xargs -r docker rmi -f
 
 seed-redis:
 	@examples/scripts/seed_redis.sh
