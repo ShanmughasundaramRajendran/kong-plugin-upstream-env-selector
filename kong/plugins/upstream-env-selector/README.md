@@ -2,6 +2,9 @@
 
 Production-ready Kong plugin for request-driven upstream selection.
 
+Repository-level setup, demo, and test commands are documented in:
+`/README.md`
+
 ## What it does
 
 Chooses a Kong Upstream dynamically based on request metadata, in this order:
