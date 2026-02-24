@@ -35,7 +35,7 @@ services:
       PORT: "8080"
       ECHO_RESPONSE: "dev"
     ports:
-      - "18080:8080"
+      - "8080:8080"
 
   orders_api_prod:
     image: ealen/echo-server:latest
@@ -43,7 +43,7 @@ services:
       PORT: "8080"
       ECHO_RESPONSE: "prod"
     ports:
-      - "18081:8080"
+      - "8081:8080"
 
   redis:
     image: redis:7

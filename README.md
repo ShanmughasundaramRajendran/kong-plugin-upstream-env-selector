@@ -31,6 +31,8 @@ Endpoints:
 
 - Proxy: `http://localhost:8000`
 - Admin: `http://localhost:8001`
+- Dev backend echo: `http://localhost:8080`
+- Prod backend echo: `http://localhost:8081`
 
 Demo names used in declarative config:
 
