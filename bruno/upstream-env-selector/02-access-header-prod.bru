@@ -1,7 +1,7 @@
 meta {
-  name: Strict No Selector
+  name: Access Header To Prod
   type: http
-  seq: 5
+  seq: 2
 }
 
 get {
@@ -12,4 +12,6 @@ get {
 
 headers {
   Accept: application/json
+  X-Client-Env: prod
+  Authorization: Bearer {{jwt_neutral_client}}
 }

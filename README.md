@@ -1,94 +1,137 @@
 # kong-plugin-upstream-env-selector
 
-Repository for the `upstream-env-selector` Kong plugin, local demo stack, and tests.
+Kong plugin + local demo stack + test suites for request-based upstream selection.
 
-Plugin reference docs live at:
+Plugin-level docs:
 `kong/plugins/upstream-env-selector/README.md`
 
-## Runtime
+## Routing Priority
 
-- Kong Gateway `latest` (image tag)
-- DB-less (declarative config)
+The plugin checks selectors in this order and picks the first matching upstream key:
 
-## Local Demo
+1. `X-Upstream-Env`
+2. `access_policy.sni`
+3. `access_policy.header_name`
+4. `access_policy.query_param_name`
+5. `endpoint.sni`
+6. `endpoint.header_name`
+7. `endpoint.query_param_name`
+8. `X-Client-Id` header; if absent, plugin extracts JWT claim `client-id` from `Authorization: Bearer <token>` (then authenticated consumer id/custom_id/username fallback)
 
-Static map mode:
+If nothing matches, it does not block the request; Kong keeps default routing.
+
+## Local Stack
 
 ```bash
 make compose-up
-make demo
-```
-
-Redis map mode:
-
-```bash
-make compose-up-redis
-make seed-redis
-make demo
 ```
 
 Endpoints:
 
 - Proxy: `http://localhost:8000`
-- Admin: `http://localhost:8001`
-- Dev backend echo: `http://localhost:8080`
-- Prod backend echo: `http://localhost:8081`
+- Admin API: `http://localhost:8001`
+- Dev echo backend: `http://localhost:8080`
+- Prod echo backend: `http://localhost:8081`
+- QA echo backend: `http://localhost:8082`
+- Staging echo backend: `http://localhost:8083`
+- Perf echo backend: `http://localhost:8084`
 
-Demo names used in declarative config:
+Declarative config used by docker compose:
 
-- Service: `orders-gateway-service`
-- Route: `orders-api-route`
-- Route path: `/api/orders`
-- Upstreams: `orders-api-dev-upstream`, `orders-api-prod-upstream`
+- [config/kong.yml](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/config/kong.yml)
 
-## Testing
+Notes:
 
-Unit tests (Pongo/Busted):
+- JWT auth plugin is enabled on `orders-gateway-service`.
+- Kong consumers and JWT credentials are declared in `config/kong.yml`.
+- `client-id` claim in the JWT drives upstream selection when `X-Client-Id` is not sent.
+
+Stop stack:
 
 ```bash
-pongo up
-make test
-pongo down
+make compose-down
 ```
 
-Integration tests (Pongo):
+Full cleanup (containers/volumes + local built image):
+
+```bash
+make clean
+```
+
+## Test Commands
+
+Install JS deps:
+
+```bash
+make npm-install
+```
+
+Mocha functional tests:
+
+```bash
+make test-functional
+```
+
+Pongo unit tests:
+
+```bash
+make test
+```
+
+Pongo integration tests:
 
 ```bash
 make test-integration
 ```
 
-Unit + integration:
-
-```bash
-make test-pongo
-```
-
-Functional tests (Mocha):
-
-```bash
-make npm-install
-make test-functional
-```
-
-Run all test suites:
+Run all suites:
 
 ```bash
 make test-all
 ```
 
-Optional env overrides:
-
-- `BASE_URL` (default `http://localhost:8000`)
-- `ROUTE_PATH` (default `/api/orders`)
-- `PONGO_KONG_IMAGE` (default `kong/kong-gateway:latest`)
-
 ## Bruno Collection
 
 - `bruno/upstream-env-selector/bruno.json`
 - `bruno/upstream-env-selector/environments/local.bru`
-- requests `01..06`
+- requests `01..11` (simplified set):
+- default header routing
+- access policy header/query routing
+- endpoint header/query routing
+- JWT `client-id` routing
+- priority override (`X-Upstream-Env` over JWT)
+- no-selector default route behavior
+- access-policy SNI routing
+- endpoint SNI routing (separate route `/api/orders-endpoint-sni`)
 
-## Redis dependency
+SNI Bruno setup:
 
-Redis mode requires `lua-resty-redis` (`resty.redis`).
-The included `Dockerfile` installs `curl` and `lua-resty-redis`.
+1. Add host entries:
+   `127.0.0.1 access-sni-dev.local endpoint-sni-qa.local`
+2. Use HTTPS URLs from `local.bru`:
+   - `https://access-sni-dev.local:8443`
+   - `https://endpoint-sni-qa.local:8443`
+3. In Bruno, disable TLS cert validation for local self-signed certs.
+
+Client-id mappings in `config/kong.yml` include:
+
+- `dev_client` -> `dev`
+- `prod_client` -> `prod`
+- `qa_client` -> `qa`
+- `staging_client` -> `staging`
+- `perf_client` -> `perf`
+
+Kong consumer apps declared in `config/kong.yml`:
+
+- `dev-client-app`
+- `prod-client-app`
+- `qa-client-app`
+- `staging-client-app`
+- `perf-client-app`
+- `neutral-client-app` (auth-only token used for non-client-id selector tests)
+
+## Useful Overrides
+
+- `BASE_URL` (default `http://localhost:8000`)
+- `ROUTE_PATH` (default `/api/orders`)
+- `PONGO_KONG_IMAGE` (default `kong/kong-gateway:latest`)

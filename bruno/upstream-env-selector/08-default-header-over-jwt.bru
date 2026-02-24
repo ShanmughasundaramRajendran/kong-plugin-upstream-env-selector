@@ -1,7 +1,7 @@
 meta {
-  name: Dev By Consumer Id Header
+  name: Default Header Overrides JWT
   type: http
-  seq: 6
+  seq: 8
 }
 
 get {
@@ -12,5 +12,6 @@ get {
 
 headers {
   Accept: application/json
-  X-Consumer-Id: {{consumer_id}}
+  X-Upstream-Env: qa
+  Authorization: Bearer {{jwt_dev_client}}
 }

@@ -1,7 +1,7 @@
 meta {
-  name: Prod By Resource Header
+  name: No Selector Uses Default Route
   type: http
-  seq: 4
+  seq: 9
 }
 
 get {
@@ -12,5 +12,5 @@ get {
 
 headers {
   Accept: application/json
-  X-Resource-Env: prod
+  Authorization: Bearer {{jwt_neutral_client}}
 }

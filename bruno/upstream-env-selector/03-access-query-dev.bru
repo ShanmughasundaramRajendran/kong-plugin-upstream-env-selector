@@ -1,11 +1,11 @@
 meta {
-  name: Dev By Query Selector
+  name: Access Query To Dev
   type: http
   seq: 3
 }
 
 get {
-  url: {{base_url}}/api/orders?env=dev
+  url: {{base_url}}/api/orders
   body: none
   auth: none
 }
@@ -16,4 +16,5 @@ params:query {
 
 headers {
   Accept: application/json
+  Authorization: Bearer {{jwt_neutral_client}}
 }

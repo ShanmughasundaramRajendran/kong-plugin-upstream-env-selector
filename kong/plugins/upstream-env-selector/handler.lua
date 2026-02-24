@@ -1,41 +1,117 @@
 local kong = kong
 local ngx = ngx
-
-local redis_connector_ok, redis_connector = pcall(require, "resty.redis")
+local cjson = require "cjson.safe"
 
 local _M = {
   VERSION = "1.0.0",
   PRIORITY = 2003,
 }
 
--- shared dict for cache; prefer using 'kong_cache' if available, but shared dict is simplest in custom images.
--- In production, you should ensure nginx_http_lua_shared_dict includes this:
--- lua_shared_dict upstream_env_selector_cache 10m;
-local CACHE = ngx.shared and ngx.shared.upstream_env_selector_cache or nil
+local BY_SNI = "sni"
+local BY_HEADER = "header_name"
+local BY_QPARAM_NAME = "query_param_name"
+local DEFAULT_UPSTREAM_HEADER_NAME = "X-Upstream-Env"
+local DEFAULT_CLIENT_ID_HEADER_NAME = "X-Client-Id"
+local B64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-local function _trim(s)
-  return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+local function decode_base64(data)
+  if ngx and ngx.decode_base64 then
+    return ngx.decode_base64(data)
+  end
+
+  data = data:gsub("[^" .. B64CHARS .. "=]", "")
+  local bitstr = data:gsub(".", function(x)
+    if x == "=" then
+      return ""
+    end
+
+    local idx = B64CHARS:find(x, 1, true)
+    if not idx then
+      return ""
+    end
+
+    local n = idx - 1
+    local bits = ""
+    for i = 6, 1, -1 do
+      bits = bits .. (n % 2^i - n % 2^(i - 1) > 0 and "1" or "0")
+    end
+    return bits
+  end)
+
+  return bitstr:gsub("%d%d%d?%d?%d?%d?%d?%d?", function(x)
+    if #x ~= 8 then
+      return ""
+    end
+
+    local c = 0
+    for i = 1, 8 do
+      if x:sub(i, i) == "1" then
+        c = c + 2^(8 - i)
+      end
+    end
+
+    return string.char(c)
+  end)
 end
 
-local function normalize(cfg, v)
-  if v == nil then
+local function b64url_decode(input)
+  if type(input) ~= "string" or input == "" then
     return nil
   end
 
-  if type(v) ~= "string" then
-    v = tostring(v)
-  end
-
-  v = _trim(v)
-  if v == "" then
+  local data = input:gsub("-", "+"):gsub("_", "/")
+  local mod = #data % 4
+  if mod == 2 then
+    data = data .. "=="
+  elseif mod == 3 then
+    data = data .. "="
+  elseif mod ~= 0 then
     return nil
   end
 
-  if cfg.normalize then
-    v = string.lower(v)
+  return decode_base64(data)
+end
+
+local function get_jwt_claim_client_id()
+  local auth = kong.request.get_header("authorization") or kong.request.get_header("Authorization")
+  if type(auth) == "table" then
+    auth = auth[1]
   end
 
-  return v
+  if type(auth) ~= "string" then
+    return nil
+  end
+
+  local token = auth:match("^[Bb]earer%s+(.+)$")
+  if not token then
+    return nil
+  end
+
+  local parts = {}
+  for part in token:gmatch("[^%.]+") do
+    parts[#parts + 1] = part
+  end
+
+  if #parts < 2 then
+    return nil
+  end
+
+  local payload_json = b64url_decode(parts[2])
+  if not payload_json then
+    return nil
+  end
+
+  local payload = cjson.decode(payload_json)
+  if type(payload) ~= "table" then
+    return nil
+  end
+
+  local client_id = payload["client-id"]
+  if type(client_id) == "string" and client_id ~= "" then
+    return client_id
+  end
+
+  return nil
 end
 
 local function get_upstream_by_names(names, upstreams)
@@ -53,493 +129,224 @@ local function get_upstream_by_names(names, upstreams)
   return nil
 end
 
--- Kong header can be string or table
-local function get_selector_from_header(cfg, header_name)
+local function get_upstream_by_default_header(header_name, upstreams)
   local value = kong.request.get_header(header_name)
-  if value == nil then
-    return nil
-  end
-
-  if type(value) == "table" then
-    local names = {}
-    for _, v in ipairs(value) do
-      v = normalize(cfg, v)
-      if v then
-        table.insert(names, v)
-      end
-    end
-    if #names == 0 then
-      return nil
-    end
-    return names
-  end
-
-  value = normalize(cfg, value)
-  return value
-end
-
-local function get_upstream_by_default_header(cfg, upstreams)
-  local header_name = cfg.upstream_header_name
-  local selector = get_selector_from_header(cfg, header_name)
-  if not selector then
-    return nil
-  end
-
-  if type(selector) == "table" then
-    return get_upstream_by_names(selector, upstreams)
-  end
-
-  local upstream = upstreams[selector]
-  if upstream then
-    return upstream, selector
-  end
-
-  return nil
-end
-
-local function get_upstream_by_sni(cfg, enabled_flag, upstreams)
-  if not enabled_flag then
-    return nil
-  end
-
-  local sni = ngx.var.ssl_server_name
-  sni = normalize(cfg, sni)
-  if not sni then
-    return nil
-  end
-
-  local upstream = upstreams[sni]
-  if upstream then
-    return upstream, sni
-  end
-  return nil
-end
-
-local function get_upstream_by_header(cfg, header_name, upstreams)
-  if not header_name then
-    return nil
-  end
-
-  local selector = get_selector_from_header(cfg, header_name)
-  if not selector then
-    return nil
-  end
-
-  if type(selector) == "table" then
-    return get_upstream_by_names(selector, upstreams)
-  end
-
-  local upstream = upstreams[selector]
-  if upstream then
-    return upstream, selector
-  end
-  return nil
-end
-
-local function get_upstream_by_query_param(cfg, value, upstreams)
-  value = normalize(cfg, value)
   if not value then
     return nil
   end
 
-  local upstream = upstreams[value]
-  if upstream then
-    return upstream, value
+  local names = type(value) == "table" and value or { value }
+  return get_upstream_by_names(names, upstreams)
+end
+
+local function get_upstream_by_sni(enabled, upstreams)
+  if not enabled then
+    return nil
   end
+
+  local name = ngx.var.ssl_server_name
+  if not name then
+    return nil
+  end
+
+  local upstream = upstreams[name]
+  if upstream then
+    return upstream, name
+  end
+
   return nil
 end
 
-local function validate_inputs(cfg)
-  if type(cfg) ~= "table" then
-    return "upstream-env-selector: No config loaded"
+local function get_upstream_by_header(header_name, upstreams)
+  if not header_name then
+    return nil
   end
 
-  if cfg.use_redis ~= true and type(cfg.upstreams) ~= "table" then
-    return "upstream-env-selector: Invalid configuration (upstreams missing)"
+  local env_name = kong.request.get_header(header_name)
+  if not env_name then
+    return nil
+  end
+
+  if type(env_name) == "table" then
+    return get_upstream_by_names(env_name, upstreams)
+  end
+
+  local upstream = upstreams[env_name]
+  if upstream then
+    return upstream, env_name
+  end
+
+  return nil
+end
+
+local function get_upstream_by_query_param(name, upstreams)
+  if not name then
+    return nil
+  end
+
+  local env_name = kong.request.get_query_arg(name)
+  if not env_name then
+    return nil
+  end
+
+  local upstream = upstreams[env_name]
+  if upstream then
+    return upstream, env_name
+  end
+
+  return nil
+end
+
+local function set_upstream(upstream_name, reason, selector_key)
+  kong.service.set_upstream(upstream_name)
+  kong.ctx.shared.upstream_backend_id = upstream_name
+  kong.ctx.shared.upstream_selector_reason = reason
+  kong.ctx.shared.upstream_selector_key = selector_key
+end
+
+local function validate_inputs(cfg)
+  if type(cfg) ~= "table" or not next(cfg) then
+    return "upstream-env-selector: No config loaded"
   end
 
   local accp = cfg.access_policy
   local epcp = cfg.endpoint
 
   if accp ~= nil and type(accp) ~= "table" then
-    return "upstream-env-selector: Invalid access_policy"
+    return "upstream-env-selector: Invalid configuration for access_policy"
   end
+
   if epcp ~= nil and type(epcp) ~= "table" then
-    return "upstream-env-selector: Invalid endpoint policy"
+    return "upstream-env-selector: Invalid configuration for endpoint policy"
   end
 
   accp = accp or {}
   epcp = epcp or {}
 
   if not (accp.sni or accp.query_param_name or accp.header_name
-          or epcp.sni or epcp.query_param_name or epcp.header_name) then
-    return "upstream-env-selector: No policy values found"
-  end
-
-  if cfg.use_redis then
-    if not redis_connector_ok then
-      return "upstream-env-selector: Redis enabled but lua-resty-redis not available"
-    end
-    if type(cfg.redis) ~= "table" then
-      return "upstream-env-selector: Redis enabled but config.redis missing"
-    end
+    or epcp.sni or epcp.query_param_name or epcp.header_name) then
+    return "upstream-env-selector: No config values found"
   end
 
   return nil
 end
 
 local function get_client_id(cfg)
-  if cfg.client_id_source == "header" then
-    local header_name = cfg.client_id_header_name or "X-Consumer-Id"
-    local selector = get_selector_from_header(cfg, header_name)
-    if type(selector) == "table" then
-      return selector[1]
-    end
-    return selector
+  local header_name = (cfg and cfg.client_id_header_name) or DEFAULT_CLIENT_ID_HEADER_NAME
+  local client_id = kong.request.get_header(header_name)
+
+  if type(client_id) == "table" then
+    client_id = client_id[1]
   end
 
-  local consumer = kong.client.get_consumer()
-  if not consumer then
-    return nil
+  if client_id then
+    return client_id
   end
 
-  local src = cfg.client_id_source
-  if src == "custom_id" then
-    return normalize(cfg, consumer.custom_id)
-  elseif src == "username" then
-    return normalize(cfg, consumer.username)
+  client_id = get_jwt_claim_client_id()
+  if client_id then
+    return client_id
   end
 
-  return normalize(cfg, consumer.id)
-end
-
-local function set_upstream(upstream_name, reason, selector_key)
-  kong.service.set_upstream(upstream_name)
-
-  -- Expose selection details for debugging/observability.
-  kong.ctx.shared.upstream_backend_id = upstream_name
-  kong.ctx.shared.upstream_selector_reason = reason
-  kong.ctx.shared.upstream_selector_key = selector_key
-end
-
--- cache helpers
-local function cache_get(key)
-  if not CACHE then
-    return nil
-  end
-  return CACHE:get(key)
-end
-
-local function cache_set(key, value, ttl)
-  if not CACHE then
-    return
-  end
-  -- best-effort
-  CACHE:set(key, value, ttl)
-end
-
-local function redis_connect(cfg)
-  local red = redis_connector:new()
-  red:set_timeout(cfg.redis.timeout_ms)
-
-  local ok, err = red:connect(cfg.redis.host, cfg.redis.port)
-  if not ok then
-    return nil, err
-  end
-
-  if cfg.redis.ssl then
-    local sess_ok, sess_err = red:sslhandshake(nil, cfg.redis.host, cfg.redis.ssl_verify)
-    if not sess_ok then
-      return nil, sess_err
+  if kong.client and kong.client.get_consumer then
+    local consumer = kong.client.get_consumer()
+    if consumer then
+      return consumer.custom_id or consumer.username or consumer.id
     end
   end
 
-  if cfg.redis.username and cfg.redis.password then
-    local auth_ok, auth_err = red:auth(cfg.redis.username, cfg.redis.password)
-    if not auth_ok then
-      return nil, auth_err
-    end
-  elseif cfg.redis.password then
-    local auth_ok, auth_err = red:auth(cfg.redis.password)
-    if not auth_ok then
-      return nil, auth_err
-    end
-  end
-
-  if cfg.redis.database and cfg.redis.database ~= 0 then
-    local sel_ok, sel_err = red:select(cfg.redis.database)
-    if not sel_ok then
-      return nil, sel_err
-    end
-  end
-
-  return red
-end
-
-local function redis_keepalive(cfg, red)
-  if not red then
-    return
-  end
-  -- best-effort keepalive
-  red:set_keepalive(cfg.redis.keepalive_ms, cfg.redis.pool_size)
-end
-
-local function lookup_upstream(cfg, upstreams_map, selector_value)
-  -- Normalized selector_value must be non-nil
-  if not selector_value then
-    return nil
-  end
-
-  -- 1) static map mode first (if configured)
-  if upstreams_map then
-    local u = upstreams_map[selector_value]
-    if u then
-      return u, "static"
-    end
-  end
-
-  -- 2) redis mode
-  if not cfg.use_redis then
-    return nil
-  end
-
-  local cache_key = "u:" .. selector_value
-  local cached = cache_get(cache_key)
-  if cached ~= nil then
-    if cached == "__nil__" then
-      return nil
-    end
-    return cached, "cache"
-  end
-
-  local red, err = redis_connect(cfg)
-  if not red then
-    kong.log.warn("upstream-env-selector: redis connect failed: ", err)
-    if cfg.redis_fail_open then
-      return nil
-    end
-    return kong.response.exit(503, { message = "Redis unavailable" })
-  end
-
-  local key = cfg.redis_key_prefix .. selector_value
-  local val, get_err = red:get(key)
-  redis_keepalive(cfg, red)
-
-  if get_err then
-    kong.log.warn("upstream-env-selector: redis get failed: ", get_err)
-    if cfg.redis_fail_open then
-      return nil
-    end
-    return kong.response.exit(503, { message = "Redis error" })
-  end
-
-  if val == ngx.null or val == nil or val == "" then
-    cache_set(cache_key, "__nil__", cfg.negative_ttl_sec)
-    return nil
-  end
-
-  cache_set(cache_key, val, cfg.cache_ttl_sec)
-  return val, "redis"
+  return nil
 end
 
 function _M:access(cfg)
-  -- Normalize upstream map keys once per request
-  local upstreams = nil
-  if type(cfg.upstreams) == "table" then
-    upstreams = {}
-    for k, v in pairs(cfg.upstreams) do
-      local nk = normalize(cfg, k)
-      if nk and v and v ~= "" then
-        upstreams[nk] = v
-      end
-    end
-  end
-
-  -- 1) Highest priority: default header X-Upstream-Env
-  do
-    local selector = get_selector_from_header(cfg, cfg.upstream_header_name)
-    if selector then
-      if type(selector) == "table" then
-        -- multi-value: choose first that resolves
-        for _, s in ipairs(selector) do
-          local u, src_or_res = lookup_upstream(cfg, upstreams, s)
-          if type(src_or_res) == "table" and src_or_res.status then
-            return src_or_res -- response.exit
-          end
-          if u then
-            kong.log.debug("upstream-env-selector: upstream found using default header: ", u)
-            return set_upstream(u, "default_header", s)
-          end
-        end
-      else
-        local u, src_or_res = lookup_upstream(cfg, upstreams, selector)
-        if type(src_or_res) == "table" and src_or_res.status then
-          return src_or_res
-        end
-        if u then
-          kong.log.debug("upstream-env-selector: upstream found using default header: ", u)
-          return set_upstream(u, "default_header", selector)
-        end
-      end
-    end
-  end
-
-  -- 2) Validate policy config (if invalid -> log and do nothing)
-  local err = validate_inputs(cfg)
-  if err then
-    kong.log.debug(err)
-    kong.log.debug("upstream-env-selector: No custom environments configured, using default/primary routing")
-    if cfg.strict then
-      return kong.response.exit(500, { message = err })
-    end
+  if type(cfg) ~= "table" then
+    kong.log.debug("upstream-env-selector: No config loaded")
     return
   end
 
-  local policy = cfg.access_policy or {}
-  local endpoint = cfg.endpoint or {}
+  local upstreams = cfg.upstreams
+  if type(upstreams) ~= "table" then
+    kong.log.debug("upstream-env-selector: Missing upstream map")
+    return
+  end
 
-  -- 3) Second priority: client metadata SNI
-  do
-    local sni = normalize(cfg, ngx.var.ssl_server_name)
-    if policy.sni and sni then
-      local u, src_or_res = lookup_upstream(cfg, upstreams, sni)
-      if type(src_or_res) == "table" and src_or_res.status then
-        return src_or_res
-      end
-      if u then
-        kong.log.debug("upstream-env-selector: upstream env by client SNI: ", u)
-        return set_upstream(u, "client_sni", sni)
-      end
+  local default_header_name = cfg.upstream_header_name or DEFAULT_UPSTREAM_HEADER_NAME
+
+  local upstream, key = get_upstream_by_default_header(default_header_name, upstreams)
+  if upstream then
+    kong.log.debug("upstream-env-selector: upstream found using default header: ", upstream)
+    set_upstream(upstream, "default_header", key)
+    return
+  end
+
+  local err = validate_inputs(cfg)
+  if not err then
+    local policy = cfg.access_policy or {}
+    local endpoint = cfg.endpoint or {}
+
+    upstream, key = get_upstream_by_sni(policy[BY_SNI], upstreams)
+    if upstream then
+      kong.log.debug("upstream-env-selector: upstream env by client sni: ", upstream)
+      set_upstream(upstream, "client_sni", key)
+      return
+    end
+
+    upstream, key = get_upstream_by_header(policy[BY_HEADER], upstreams)
+    if upstream then
+      kong.log.debug("upstream-env-selector: upstream env by client header: ", upstream)
+      set_upstream(upstream, "client_header", key)
+      return
+    end
+
+    upstream, key = get_upstream_by_query_param(policy[BY_QPARAM_NAME], upstreams)
+    if upstream then
+      kong.log.debug("upstream-env-selector: upstream env by client query param: ", upstream)
+      set_upstream(upstream, "client_query", key)
+      return
+    end
+
+    upstream, key = get_upstream_by_sni(endpoint[BY_SNI], upstreams)
+    if upstream then
+      kong.log.debug("upstream-env-selector: upstream env by resource sni: ", upstream)
+      set_upstream(upstream, "resource_sni", key)
+      return
+    end
+
+    upstream, key = get_upstream_by_header(endpoint[BY_HEADER], upstreams)
+    if upstream then
+      kong.log.debug("upstream-env-selector: upstream env by resource header: ", upstream)
+      set_upstream(upstream, "resource_header", key)
+      return
+    end
+
+    upstream, key = get_upstream_by_query_param(endpoint[BY_QPARAM_NAME], upstreams)
+    if upstream then
+      kong.log.debug("upstream-env-selector: upstream env by resource query param: ", upstream)
+      set_upstream(upstream, "resource_query", key)
+      return
     end
   end
 
-  -- 4) Third priority: client metadata header
-  do
-    local hn = policy.header_name
-    if hn then
-      local selector = get_selector_from_header(cfg, hn)
-      if selector then
-        if type(selector) == "table" then
-          for _, s in ipairs(selector) do
-            local u, src_or_res = lookup_upstream(cfg, upstreams, s)
-            if type(src_or_res) == "table" and src_or_res.status then
-              return src_or_res
-            end
-            if u then
-              kong.log.debug("upstream-env-selector: upstream env by client header: ", u)
-              return set_upstream(u, "client_header", s)
-            end
-          end
-        else
-          local u, src_or_res = lookup_upstream(cfg, upstreams, selector)
-          if type(src_or_res) == "table" and src_or_res.status then
-            return src_or_res
-          end
-          if u then
-            kong.log.debug("upstream-env-selector: upstream env by client header: ", u)
-            return set_upstream(u, "client_header", selector)
-          end
-        end
-      end
-    end
-  end
-
-  -- 5) Fourth priority: client metadata query param
-  if policy.query_param_name then
-    local qv = kong.request.get_query_arg(policy.query_param_name)
-    qv = normalize(cfg, qv)
-    if qv then
-      local u, src_or_res = lookup_upstream(cfg, upstreams, qv)
-      if type(src_or_res) == "table" and src_or_res.status then
-        return src_or_res
-      end
-      if u then
-        kong.log.debug("upstream-env-selector: upstream env by client query param: ", u)
-        return set_upstream(u, "client_query", qv)
-      end
-    end
-  end
-
-  -- 6) Fifth priority: resource/endpoint SNI
-  do
-    local sni = normalize(cfg, ngx.var.ssl_server_name)
-    if endpoint.sni and sni then
-      local u, src_or_res = lookup_upstream(cfg, upstreams, sni)
-      if type(src_or_res) == "table" and src_or_res.status then
-        return src_or_res
-      end
-      if u then
-        kong.log.debug("upstream-env-selector: upstream env by resource SNI: ", u)
-        return set_upstream(u, "resource_sni", sni)
-      end
-    end
-  end
-
-  -- 7) Sixth priority: resource/endpoint header
-  do
-    local hn = endpoint.header_name
-    if hn then
-      local selector = get_selector_from_header(cfg, hn)
-      if selector then
-        if type(selector) == "table" then
-          for _, s in ipairs(selector) do
-            local u, src_or_res = lookup_upstream(cfg, upstreams, s)
-            if type(src_or_res) == "table" and src_or_res.status then
-              return src_or_res
-            end
-            if u then
-              kong.log.debug("upstream-env-selector: upstream env by resource header: ", u)
-              return set_upstream(u, "resource_header", s)
-            end
-          end
-        else
-          local u, src_or_res = lookup_upstream(cfg, upstreams, selector)
-          if type(src_or_res) == "table" and src_or_res.status then
-            return src_or_res
-          end
-          if u then
-            kong.log.debug("upstream-env-selector: upstream env by resource header: ", u)
-            return set_upstream(u, "resource_header", selector)
-          end
-        end
-      end
-    end
-  end
-
-  -- 8) Seventh priority: resource/endpoint query param
-  if endpoint.query_param_name then
-    local qv = kong.request.get_query_arg(endpoint.query_param_name)
-    qv = normalize(cfg, qv)
-    if qv then
-      local u, src_or_res = lookup_upstream(cfg, upstreams, qv)
-      if type(src_or_res) == "table" and src_or_res.status then
-        return src_or_res
-      end
-      if u then
-        kong.log.debug("upstream-env-selector: upstream env by resource query param: ", u)
-        return set_upstream(u, "resource_query", qv)
-      end
-    end
-  end
-
-  -- 9) Last priority: client_id
   local client_id = get_client_id(cfg)
   if client_id then
-    local u, src_or_res = lookup_upstream(cfg, upstreams, client_id)
-    if type(src_or_res) == "table" and src_or_res.status then
-      return src_or_res
+    local client_id_header_name = (cfg and cfg.client_id_header_name) or DEFAULT_CLIENT_ID_HEADER_NAME
+    if kong.service and kong.service.request and kong.service.request.set_header then
+      kong.service.request.set_header(client_id_header_name, client_id)
     end
-    if u then
-      kong.log.debug("upstream-env-selector: upstream env by client id: ", u)
-      return set_upstream(u, "client_id", client_id)
+
+    upstream = upstreams[client_id]
+    if upstream then
+      kong.log.debug("upstream-env-selector: upstream env by client id: ", upstream)
+      set_upstream(upstream, "client_id", client_id)
+      return
     end
   end
 
-  -- 10) No match
-  kong.log.debug("upstream-env-selector: no match found; leaving default routing")
-  if cfg.strict then
-    return kong.response.exit(400, { message = "No matching upstream for request" })
+  if err then
+    kong.log.debug(err)
   end
+
+  kong.log.debug("upstream-env-selector: No custom environments configured, using default/primary environment")
 end
 
 return _M

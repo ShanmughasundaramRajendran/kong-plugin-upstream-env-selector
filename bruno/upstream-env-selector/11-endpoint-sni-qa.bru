@@ -1,0 +1,16 @@
+meta {
+  name: Endpoint SNI To QA
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{sni_endpoint_base_url}}/api/orders-endpoint-sni
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_neutral_client}}
+}

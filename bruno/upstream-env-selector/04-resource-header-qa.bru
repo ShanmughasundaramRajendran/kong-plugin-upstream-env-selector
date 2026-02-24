@@ -1,7 +1,7 @@
 meta {
-  name: Dev By Default Header
+  name: Resource Header To QA
   type: http
-  seq: 1
+  seq: 4
 }
 
 get {
@@ -12,5 +12,6 @@ get {
 
 headers {
   Accept: application/json
-  X-Upstream-Env: dev
+  X-Resource-Env: qa
+  Authorization: Bearer {{jwt_neutral_client}}
 }

@@ -1,0 +1,16 @@
+meta {
+  name: Access Policy SNI To Dev
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{sni_access_base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_neutral_client}}
+}

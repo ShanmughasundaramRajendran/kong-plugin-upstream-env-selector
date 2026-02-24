@@ -1,7 +1,7 @@
 meta {
-  name: Prod By Default Header
+  name: Resource Query To Prod
   type: http
-  seq: 2
+  seq: 5
 }
 
 get {
@@ -10,7 +10,11 @@ get {
   auth: none
 }
 
+params:query {
+  resource_env: prod
+}
+
 headers {
   Accept: application/json
-  X-Upstream-Env: prod
+  Authorization: Bearer {{jwt_neutral_client}}
 }
