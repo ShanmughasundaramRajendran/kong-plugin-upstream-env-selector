@@ -1,7 +1,7 @@
 meta {
-  name: JWT Client Id To Staging
+  name: Default Header To Dev
   type: http
-  seq: 7
+  seq: 2
 }
 
 get {
@@ -12,5 +12,6 @@ get {
 
 headers {
   Accept: application/json
-  Authorization: Bearer {{jwt_staging_client}}
+  X-Upstream-Env: dev
+  Authorization: Bearer {{jwt_neutral_client}}
 }

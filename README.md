@@ -1,9 +1,9 @@
-# kong-plugin-upstream-env-selector
+# kong-plugin-dynamic-routing
 
 Kong plugin + local demo stack + test suites for request-based upstream selection.
 
 Plugin-level docs:
-`kong/plugins/upstream-env-selector/README.md`
+`kong/plugins/dynamic-routing/README.md`
 
 ## Routing Priority
 
@@ -38,7 +38,7 @@ Endpoints:
 
 Declarative config used by docker compose:
 
-- [config/kong.yml](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/config/kong.yml)
+- [config/kong.yml](/Users/shanmughasundaramrajendran/kong-plugin-dynamic-routing/config/kong.yml)
 
 Notes:
 
@@ -92,8 +92,8 @@ make test-all
 
 ## Bruno Collection
 
-- `bruno/upstream-env-selector/bruno.json`
-- `bruno/upstream-env-selector/environments/local.bru`
+- `bruno/dynamic-routing/bruno.json`
+- `bruno/dynamic-routing/environments/local.bru`
 - requests `01..11` (simplified set):
 - default header routing
 - access policy header/query routing

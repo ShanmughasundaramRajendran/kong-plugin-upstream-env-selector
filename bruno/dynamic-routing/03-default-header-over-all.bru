@@ -1,7 +1,7 @@
 meta {
-  name: Access Header To Prod
+  name: Default Header Overrides Others
   type: http
-  seq: 2
+  seq: 3
 }
 
 get {
@@ -10,8 +10,15 @@ get {
   auth: none
 }
 
+params:query {
+  env: prod
+  resource_env: dev
+}
+
 headers {
   Accept: application/json
-  X-Client-Env: prod
+  X-Upstream-Env: qa
+  X-Client-Env: dev
+  X-Resource-Env: prod
   Authorization: Bearer {{jwt_neutral_client}}
 }

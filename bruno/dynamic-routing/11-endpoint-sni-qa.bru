@@ -1,16 +1,17 @@
 meta {
-  name: Access Policy SNI To Dev
+  name: Endpoint SNI To QA
   type: http
-  seq: 10
+  seq: 11
 }
 
 get {
-  url: {{sni_access_base_url}}/api/orders
+  url: {{sni_endpoint_base_url}}/api/orders-endpoint-sni
   body: none
   auth: none
 }
 
 headers {
   Accept: application/json
+  Host: endpoint-sni-qa.local
   Authorization: Bearer {{jwt_neutral_client}}
 }

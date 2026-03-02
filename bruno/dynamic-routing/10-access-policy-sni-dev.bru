@@ -1,17 +1,17 @@
 meta {
-  name: Resource Header To QA
+  name: Access Policy SNI To Dev
   type: http
-  seq: 4
+  seq: 10
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{sni_access_base_url}}/api/orders
   body: none
   auth: none
 }
 
 headers {
   Accept: application/json
-  X-Resource-Env: qa
+  Host: access-sni-dev.local
   Authorization: Bearer {{jwt_neutral_client}}
 }

@@ -1,6 +1,8 @@
-local PLUGIN_MODULE = "kong.plugins.upstream-env-selector.handler"
+local PLUGIN_MODULE = "kong.plugins.dynamic-routing.handler"
 
-describe("upstream-env-selector (unit)", function()
+-- Unit suite for ACCESS phase precedence and fallback behavior.
+-- `rewrite` and `log` phases are intentionally no-op for this plugin.
+describe("dynamic-routing (unit)", function()
   local cfg
   local set_header_calls
 
@@ -140,6 +142,21 @@ describe("upstream-env-selector (unit)", function()
     assert.equal("client_query", kong.ctx.shared.upstream_selector_reason)
   end)
 
+  it("client query supports table values and picks first match", function()
+    local selected
+    local plugin = load_plugin({
+      get_query_arg = function(name)
+        if name == "env" then return { "unknown", "qa" } end
+      end,
+      ngx = { var = {} },
+      set_upstream = function(u) selected = u end,
+    })
+
+    plugin:access(cfg)
+    assert.equal("up-qa", selected)
+    assert.equal("client_query", kong.ctx.shared.upstream_selector_reason)
+  end)
+
   it("priority #6: resource header when access policy is disabled", function()
     local selected
     local plugin = load_plugin({
@@ -196,6 +213,29 @@ describe("upstream-env-selector (unit)", function()
     assert.equal("qa_client", set_header_calls["X-Client-Id"])
   end)
 
+  it("falls back to JWT claim client-id when client id header is empty", function()
+    local selected
+    local jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
+      .. ".eyJjbGllbnQtaWQiOiJkZXZfY2xpZW50In0."
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "X-Client-Id" then
+          return ""
+        end
+        if name == "authorization" then
+          return "Bearer " .. jwt
+        end
+      end,
+      ngx = { var = {} },
+      set_upstream = function(u) selected = u end,
+    })
+
+    plugin:access(cfg)
+    assert.equal("up-dev", selected)
+    assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("dev_client", set_header_calls["X-Client-Id"])
+  end)
+
   it("fallback to authenticated consumer object when header and token are absent", function()
     local selected
     local plugin = load_plugin({
@@ -244,5 +284,173 @@ describe("upstream-env-selector (unit)", function()
 
     plugin:access(cfg)
     assert.equal(0, set_upstream_calls)
+  end)
+
+  it("default header table ignores empty values and picks first valid match", function()
+    local selected
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "X-Upstream-Env" then return { "", "unknown", "qa" } end
+      end,
+      set_upstream = function(u) selected = u end,
+      ngx = { var = {} },
+    })
+
+    plugin:access(cfg)
+    assert.equal("up-qa", selected)
+    assert.equal("default_header", kong.ctx.shared.upstream_selector_reason)
+  end)
+
+  it("endpoint header supports table values and picks first valid match", function()
+    local selected
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "X-Resource-Env" then return { "unknown", "prod" } end
+      end,
+      set_upstream = function(u) selected = u end,
+      ngx = { var = {} },
+    })
+
+    cfg.access_policy = {}
+    plugin:access(cfg)
+
+    assert.equal("up-prod", selected)
+    assert.equal("resource_header", kong.ctx.shared.upstream_selector_reason)
+  end)
+
+  it("endpoint query supports table values and picks first valid match", function()
+    local selected
+    local plugin = load_plugin({
+      get_query_arg = function(name)
+        if name == "resource_env" then return { "unknown", "qa" } end
+      end,
+      set_upstream = function(u) selected = u end,
+      ngx = { var = {} },
+    })
+
+    cfg.access_policy = {}
+    cfg.endpoint = {
+      query_param_name = "resource_env",
+    }
+
+    plugin:access(cfg)
+    assert.equal("up-qa", selected)
+    assert.equal("resource_query", kong.ctx.shared.upstream_selector_reason)
+  end)
+
+  it("authorization table uses first bearer value for JWT client-id extraction", function()
+    local selected
+    local qa_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnQtaWQiOiJxYV9jbGllbnQifQ."
+    local prod_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnQtaWQiOiJwcm9kX2NsaWVudCJ9."
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "authorization" then
+          return {
+            "Bearer " .. qa_jwt,
+            "Bearer " .. prod_jwt,
+          }
+        end
+      end,
+      set_upstream = function(u) selected = u end,
+      ngx = { var = {} },
+    })
+
+    plugin:access(cfg)
+    assert.equal("up-qa", selected)
+    assert.equal("qa_client", set_header_calls["X-Client-Id"])
+  end)
+
+  it("ignores malformed JWT payload and falls back to authenticated consumer", function()
+    local selected
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "authorization" then
+          return "Bearer aaa.x.ccc"
+        end
+      end,
+      get_consumer = function()
+        return { custom_id = "prod_client" }
+      end,
+      set_upstream = function(u) selected = u end,
+      ngx = { var = {} },
+    })
+
+    plugin:access(cfg)
+    assert.equal("up-prod", selected)
+    assert.equal("prod_client", set_header_calls["X-Client-Id"])
+  end)
+
+  it("ignores JWT without string client-id and falls back to consumer", function()
+    local selected
+    local non_string_client_id_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnQtaWQiOjEyM30."
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "authorization" then
+          return "Bearer " .. non_string_client_id_jwt
+        end
+      end,
+      get_consumer = function()
+        return { custom_id = "qa_client" }
+      end,
+      set_upstream = function(u) selected = u end,
+      ngx = { var = {} },
+    })
+
+    plugin:access(cfg)
+    assert.equal("up-qa", selected)
+    assert.equal("qa_client", set_header_calls["X-Client-Id"])
+  end)
+
+  it("does not fail when cfg is nil", function()
+    local set_upstream_calls = 0
+    local plugin = load_plugin({
+      set_upstream = function()
+        set_upstream_calls = set_upstream_calls + 1
+      end,
+      ngx = { var = {} },
+    })
+
+    local ok = pcall(function()
+      plugin:access(nil)
+    end)
+    assert.is_true(ok)
+    assert.equal(0, set_upstream_calls)
+  end)
+
+  it("does not fail when cfg.upstreams is not a table", function()
+    local set_upstream_calls = 0
+    local plugin = load_plugin({
+      set_upstream = function()
+        set_upstream_calls = set_upstream_calls + 1
+      end,
+      ngx = { var = {} },
+    })
+
+    cfg.upstreams = "not-a-table"
+    local ok = pcall(function()
+      plugin:access(cfg)
+    end)
+    assert.is_true(ok)
+    assert.equal(0, set_upstream_calls)
+  end)
+
+  it("still routes by client-id when kong.service.request.set_header is unavailable", function()
+    local selected
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "X-Client-Id" then return "qa_client" end
+      end,
+      set_upstream = function(u) selected = u end,
+      ngx = { var = {} },
+    })
+
+    kong.service.request = nil
+    local ok = pcall(function()
+      plugin:access(cfg)
+    end)
+
+    assert.is_true(ok)
+    assert.equal("up-qa", selected)
+    assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
   end)
 end)

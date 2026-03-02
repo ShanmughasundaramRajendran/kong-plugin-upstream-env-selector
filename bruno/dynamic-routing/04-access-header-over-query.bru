@@ -1,7 +1,7 @@
 meta {
-  name: Access Query To Dev
+  name: Access Header Over Query
   type: http
-  seq: 3
+  seq: 4
 }
 
 get {
@@ -16,5 +16,6 @@ params:query {
 
 headers {
   Accept: application/json
+  X-Client-Env: qa
   Authorization: Bearer {{jwt_neutral_client}}
 }

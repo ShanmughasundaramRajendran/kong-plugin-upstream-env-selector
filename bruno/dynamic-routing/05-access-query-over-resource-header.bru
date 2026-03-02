@@ -1,5 +1,5 @@
 meta {
-  name: Resource Query To Prod
+  name: Access Query Over Resource Header
   type: http
   seq: 5
 }
@@ -11,10 +11,11 @@ get {
 }
 
 params:query {
-  resource_env: prod
+  env: dev
 }
 
 headers {
   Accept: application/json
+  X-Resource-Env: qa
   Authorization: Bearer {{jwt_neutral_client}}
 }

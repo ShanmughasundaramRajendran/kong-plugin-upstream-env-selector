@@ -2,12 +2,12 @@
 services:
   kong:
     build: .
-    image: kong-upstream-env-selector:latest
-    container_name: kong-upstream-env-selector
+    image: kong-dynamic-routing:latest
+    container_name: kong-dynamic-routing
     environment:
       KONG_DATABASE: "off"
       KONG_DECLARATIVE_CONFIG: /kong/config/kong.yml
-      KONG_PLUGINS: "bundled,upstream-env-selector"
+      KONG_PLUGINS: "bundled,dynamic-routing"
       KONG_LOG_LEVEL: "debug"
       KONG_ADMIN_LISTEN: 0.0.0.0:8001
       KONG_ADMIN_GUI_LISTEN: 0.0.0.0:8002
@@ -19,7 +19,7 @@ services:
       - "8444:8444"
       - "8002:8002"
     volumes:
-      - ./kong/plugins/upstream-env-selector:/usr/local/share/lua/5.1/kong/plugins/upstream-env-selector:ro
+      - ./kong/plugins/dynamic-routing:/usr/local/share/lua/5.1/kong/plugins/dynamic-routing:ro
       - ./config:/kong/config:ro
     depends_on:
       - orders_api_dev

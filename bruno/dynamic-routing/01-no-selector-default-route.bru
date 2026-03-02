@@ -1,7 +1,7 @@
 meta {
-  name: Default Header Overrides JWT
+  name: No Selector Uses Default Route
   type: http
-  seq: 8
+  seq: 1
 }
 
 get {
@@ -12,6 +12,5 @@ get {
 
 headers {
   Accept: application/json
-  X-Upstream-Env: qa
-  Authorization: Bearer {{jwt_dev_client}}
+  Authorization: Bearer {{jwt_neutral_client}}
 }

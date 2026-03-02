@@ -1,4 +1,4 @@
-# upstream-env-selector (Kong)
+# dynamic-routing (Kong)
 
 Request-driven upstream selector plugin for Kong.
 
@@ -27,7 +27,7 @@ If nothing matches, the plugin does not block. Kong uses service default routing
 
 ```yaml
 plugins:
-- name: upstream-env-selector
+- name: dynamic-routing
   service: my-service
   config:
     upstream_header_name: X-Upstream-Env

@@ -1,13 +1,17 @@
 meta {
-  name: Endpoint SNI To QA
+  name: Resource Query To Dev
   type: http
-  seq: 11
+  seq: 7
 }
 
 get {
-  url: {{sni_endpoint_base_url}}/api/orders-endpoint-sni
+  url: {{base_url}}/api/orders
   body: none
   auth: none
+}
+
+params:query {
+  resource_env: dev
 }
 
 headers {

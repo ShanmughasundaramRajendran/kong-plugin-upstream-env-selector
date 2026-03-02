@@ -1,5 +1,5 @@
 meta {
-  name: No Selector Uses Default Route
+  name: Client Id Header To Perf
   type: http
   seq: 9
 }
@@ -12,5 +12,6 @@ get {
 
 headers {
   Accept: application/json
+  X-Client-Id: perf_client
   Authorization: Bearer {{jwt_neutral_client}}
 }

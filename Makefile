@@ -35,10 +35,10 @@ npm-install:
 	@npm install
 
 test:
-	@KONG_IMAGE=$(PONGO_KONG_IMAGE) $(PONGO) run -- -v spec/unit
+	@KONG_IMAGE=$(PONGO_KONG_IMAGE) $(PONGO) run -- -v spec/dynamic-routing/01-schema_spec.lua spec/dynamic-routing/02-unit_spec.lua
 
 test-integration:
-	@KONG_IMAGE=$(PONGO_KONG_IMAGE) $(PONGO) run -- -v spec/integration
+	@KONG_IMAGE=$(PONGO_KONG_IMAGE) $(PONGO) run -- -v spec/dynamic-routing/10-integration_spec.lua
 
 test-pongo:
 	@$(MAKE) test
@@ -46,7 +46,7 @@ test-pongo:
 
 lint:
 	@echo "Running luacheck if present in pongo image..."
-	-@KONG_IMAGE=$(PONGO_KONG_IMAGE) $(PONGO) run -- luacheck kong/plugins/upstream-env-selector
+	-@KONG_IMAGE=$(PONGO_KONG_IMAGE) $(PONGO) run -- luacheck kong/plugins/dynamic-routing
 
 test-functional:
 	@echo "Waiting for Kong proxy readiness..."
@@ -82,6 +82,6 @@ demo:
 	@examples/scripts/test_requests.sh
 
 package:
-	@rm -f kong-plugin-upstream-env-selector_complete.zip
-	@zip -r kong-plugin-upstream-env-selector_complete.zip kong spec rockspecs config .github docker-compose.yml Makefile Dockerfile package.json test bruno examples/scripts -x "*.DS_Store"
-	@echo "Created kong-plugin-upstream-env-selector_complete.zip"
+	@rm -f kong-plugin-dynamic-routing_complete.zip
+	@zip -r kong-plugin-dynamic-routing_complete.zip kong spec rockspecs config .github docker-compose.yml Makefile Dockerfile package.json test bruno examples/scripts -x "*.DS_Store"
+	@echo "Created kong-plugin-dynamic-routing_complete.zip"

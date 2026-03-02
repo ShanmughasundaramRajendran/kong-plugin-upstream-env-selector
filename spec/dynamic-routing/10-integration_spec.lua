@@ -2,7 +2,8 @@ local helpers = require "spec.helpers"
 local socket = require "socket"
 local threads = require "llthreads2.ex"
 
-describe("upstream-env-selector (integration)", function()
+-- Integration suite validating ACCESS phase routing decisions with real Kong upstreams.
+describe("dynamic-routing (integration)", function()
   local admin_client
   local proxy_client
 
@@ -14,11 +15,11 @@ describe("upstream-env-selector (integration)", function()
       "upstreams",
       "targets",
     }, {
-      "upstream-env-selector",
+      "dynamic-routing",
     })
 
     assert(helpers.start_kong({
-      plugins = "bundled,upstream-env-selector",
+      plugins = "bundled,dynamic-routing",
     }))
   end)
 
@@ -126,7 +127,7 @@ describe("upstream-env-selector (integration)", function()
 
     res = assert(admin_client:post("/plugins", {
       body = {
-        name = "upstream-env-selector",
+        name = "dynamic-routing",
         config = {
           upstream_header_name = "X-Upstream-Env",
           client_id_header_name = "X-Client-Id",
