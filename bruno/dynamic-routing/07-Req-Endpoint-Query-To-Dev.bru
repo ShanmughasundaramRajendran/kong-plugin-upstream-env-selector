@@ -1,0 +1,36 @@
+meta {
+  name: 07-Req-Endpoint Query To Dev
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+params:query {
+  resource_env: dev
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_neutral_client}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("routes to dev", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("dev");
+  });
+}
+
+docs {
+  Endpoint query resource_env is used when higher selectors are absent.
+  Expected backend: dev.
+}

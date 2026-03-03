@@ -190,10 +190,10 @@ describe("dynamic-routing (unit)", function()
     assert.equal("dev_client", set_header_calls["X-Client-Id"])
   end)
 
-  it("falls back to JWT claim client-id when client id header is absent", function()
+  it("falls back to JWT claim client_id when client id header is absent", function()
     local selected
     local jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
-      .. ".eyJjbGllbnQtaWQiOiJxYV9jbGllbnQifQ."
+      .. ".eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ."
     local plugin = load_plugin({
       get_header = function(name)
         if name == "authorization" then
@@ -213,10 +213,55 @@ describe("dynamic-routing (unit)", function()
     assert.equal("qa_client", set_header_calls["X-Client-Id"])
   end)
 
-  it("falls back to JWT claim client-id when client id header is empty", function()
+  it("uses consumer upstream_env tag when present", function()
+    local selected
+    local plugin = load_plugin({
+      get_consumer = function()
+        return {
+          custom_id = "neutral_client",
+          tags = { "upstream_env:qa" },
+        }
+      end,
+      ngx = { var = {} },
+      set_upstream = function(u) selected = u end,
+    })
+
+    plugin:access(cfg)
+    assert.equal("up-qa", selected)
+    assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("qa", set_header_calls["X-Client-Id"])
+  end)
+
+  it("consumer upstream_env tag takes precedence over JWT claim", function()
     local selected
     local jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
-      .. ".eyJjbGllbnQtaWQiOiJkZXZfY2xpZW50In0."
+      .. ".eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0."
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "authorization" then
+          return "Bearer " .. jwt
+        end
+      end,
+      get_consumer = function()
+        return {
+          custom_id = "neutral_client",
+          tags = { "upstream_env:prod" },
+        }
+      end,
+      ngx = { var = {} },
+      set_upstream = function(u) selected = u end,
+    })
+
+    plugin:access(cfg)
+    assert.equal("up-prod", selected)
+    assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("prod", set_header_calls["X-Client-Id"])
+  end)
+
+  it("falls back to JWT claim client_id when client id header is empty", function()
+    local selected
+    local jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
+      .. ".eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0."
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Client-Id" then
@@ -338,10 +383,10 @@ describe("dynamic-routing (unit)", function()
     assert.equal("resource_query", kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("authorization table uses first bearer value for JWT client-id extraction", function()
+  it("authorization table uses first bearer value for JWT client_id extraction", function()
     local selected
-    local qa_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnQtaWQiOiJxYV9jbGllbnQifQ."
-    local prod_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnQtaWQiOiJwcm9kX2NsaWVudCJ9."
+    local qa_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ."
+    local prod_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOiJwcm9kX2NsaWVudCJ9."
     local plugin = load_plugin({
       get_header = function(name)
         if name == "authorization" then
@@ -380,9 +425,9 @@ describe("dynamic-routing (unit)", function()
     assert.equal("prod_client", set_header_calls["X-Client-Id"])
   end)
 
-  it("ignores JWT without string client-id and falls back to consumer", function()
+  it("ignores JWT without string client_id and falls back to consumer", function()
     local selected
-    local non_string_client_id_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnQtaWQiOjEyM30."
+    local non_string_client_id_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOjEyM30."
     local plugin = load_plugin({
       get_header = function(name)
         if name == "authorization" then
@@ -434,7 +479,7 @@ describe("dynamic-routing (unit)", function()
     assert.equal(0, set_upstream_calls)
   end)
 
-  it("still routes by client-id when kong.service.request.set_header is unavailable", function()
+  it("still routes by client_id when kong.service.request.set_header is unavailable", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)

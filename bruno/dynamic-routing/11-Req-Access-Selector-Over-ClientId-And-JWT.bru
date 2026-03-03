@@ -1,0 +1,34 @@
+meta {
+  name: 11-Req-Access Selector Over Client-Id and JWT
+  type: http
+  seq: 11
+}
+
+docs {
+  Access selector precedence should override X-Client-Id and JWT client_id values.
+  Expected backend: dev (from X-Client-Env).
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  X-Client-Env: dev
+  X-Client-Id: perf_client
+  Authorization: Bearer {{jwt_qa_client}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("routes to dev", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("dev");
+  });
+}

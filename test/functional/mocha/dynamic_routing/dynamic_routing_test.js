@@ -16,7 +16,7 @@ const JWT_CREDS_BY_CLIENT_ID = {
   dev_client: { key: "dev-client-key", secret: "dev-client-secret" },
   prod_client: { key: "prod-client-key", secret: "prod-client-secret" },
   qa_client: { key: "qa-client-key", secret: "qa-client-secret" },
-  staging_client: { key: "staging-client-key", secret: "staging-client-secret" },
+  it_client: { key: "it-client-key", secret: "it-client-secret" },
   perf_client: { key: "perf-client-key", secret: "perf-client-secret" },
   neutral_client: { key: "neutral-client-key", secret: "neutral-client-secret" },
 };
@@ -24,13 +24,13 @@ const JWT_CREDS_BY_CLIENT_ID = {
 function createJwtWithClientId(clientId) {
   const creds = JWT_CREDS_BY_CLIENT_ID[clientId];
   if (!creds) {
-    throw new Error(`missing JWT credentials for client-id ${clientId}`);
+    throw new Error(`missing JWT credentials for client_id ${clientId}`);
   }
 
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
   const payload = Buffer.from(JSON.stringify({
     iss: creds.key,
-    "client-id": clientId,
+    "client_id": clientId,
     exp: 2208988800,
   })).toString("base64url");
 
@@ -75,7 +75,7 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
 
   it("should select primary upstream when no custom selectors and no X-Upstream-Env header", async function () {
     const { response, body } = await getRoute(ROUTE_PATH);
-    assertOkAndBackend(response, body, "prod");
+    assertOkAndBackend(response, body, "it");
   });
 
   it("should select upstream based on default X-Upstream-Env header", async function () {
@@ -161,13 +161,13 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
     assertOkAndBackend(response, body, "qa");
   });
 
-  it("should route by JWT client-id when no higher selectors match", async function () {
+  it("should route by JWT client_id when no higher selectors match", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        Authorization: `Bearer ${createJwtWithClientId("staging_client")}`,
+        Authorization: `Bearer ${createJwtWithClientId("it_client")}`,
       },
     });
-    assertOkAndBackend(response, body, "staging");
+    assertOkAndBackend(response, body, "it");
   });
 
   it("should route by explicit X-Client-Id header when no higher selectors match", async function () {
@@ -180,7 +180,7 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
     assertOkAndBackend(response, body, "perf");
   });
 
-  it("should keep JWT/client-id as lower priority than selectors", async function () {
+  it("should keep JWT/client_id as lower priority than selectors", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
         "X-Client-Env": "dev",

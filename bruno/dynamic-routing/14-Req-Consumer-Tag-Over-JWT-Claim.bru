@@ -1,0 +1,33 @@
+meta {
+  name: 14-Req-Consumer Tag Over JWT Claim
+  type: http
+  seq: 14
+}
+
+docs {
+  Verifies consumer application tag mapping wins over JWT client_id claim.
+  Token uses neutral consumer credential (tag upstream_env:it) but client_id claim is perf_client.
+  Expected backend: it.
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_neutral_with_perf_claim}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("routes to it (consumer tag precedence)", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("it");
+  });
+}

@@ -3,7 +3,7 @@ _transform: true
 
 services:
 - name: orders-gateway-service
-  host: orders-api-prod-upstream
+  host: orders-api-it-upstream
   port: 80
   protocol: http
   routes:
@@ -11,7 +11,7 @@ services:
     paths:
     - /api/orders
 - name: orders-gateway-endpoint-sni-service
-  host: orders-api-prod-upstream
+  host: orders-api-it-upstream
   port: 80
   protocol: http
   routes:
@@ -29,9 +29,9 @@ upstreams:
 - name: orders-api-qa-upstream
   targets:
   - target: orders_api_qa:8080
-- name: orders-api-staging-upstream
+- name: orders-api-it-upstream
   targets:
-  - target: orders_api_staging:8080
+  - target: orders_api_it:8080
 - name: orders-api-perf-upstream
   targets:
   - target: orders_api_perf:8080
@@ -56,10 +56,11 @@ plugins:
       dev: orders-api-dev-upstream
       prod: orders-api-prod-upstream
       qa: orders-api-qa-upstream
+      it: orders-api-it-upstream
       dev_client: orders-api-dev-upstream
       prod_client: orders-api-prod-upstream
       qa_client: orders-api-qa-upstream
-      staging_client: orders-api-staging-upstream
+      it_client: orders-api-it-upstream
       perf_client: orders-api-perf-upstream
       access-sni-dev.local: orders-api-dev-upstream
       endpoint-sni-qa.local: orders-api-qa-upstream
@@ -80,10 +81,11 @@ plugins:
       dev: orders-api-dev-upstream
       prod: orders-api-prod-upstream
       qa: orders-api-qa-upstream
+      it: orders-api-it-upstream
       dev_client: orders-api-dev-upstream
       prod_client: orders-api-prod-upstream
       qa_client: orders-api-qa-upstream
-      staging_client: orders-api-staging-upstream
+      it_client: orders-api-it-upstream
       perf_client: orders-api-perf-upstream
       access-sni-dev.local: orders-api-dev-upstream
       endpoint-sni-qa.local: orders-api-qa-upstream
@@ -99,36 +101,48 @@ plugins:
 consumers:
 - username: dev-client-app
   custom_id: dev_client
+  tags:
+  - upstream_env:dev
   jwt_secrets:
   - key: dev-client-key
     secret: dev-client-secret
     algorithm: HS256
 - username: prod-client-app
   custom_id: prod_client
+  tags:
+  - upstream_env:prod
   jwt_secrets:
   - key: prod-client-key
     secret: prod-client-secret
     algorithm: HS256
 - username: qa-client-app
   custom_id: qa_client
+  tags:
+  - upstream_env:qa
   jwt_secrets:
   - key: qa-client-key
     secret: qa-client-secret
     algorithm: HS256
-- username: staging-client-app
-  custom_id: staging_client
+- username: it-client-app
+  custom_id: it_client
+  tags:
+  - upstream_env:it
   jwt_secrets:
-  - key: staging-client-key
-    secret: staging-client-secret
+  - key: it-client-key
+    secret: it-client-secret
     algorithm: HS256
 - username: perf-client-app
   custom_id: perf_client
+  tags:
+  - upstream_env:perf
   jwt_secrets:
   - key: perf-client-key
     secret: perf-client-secret
     algorithm: HS256
 - username: neutral-client-app
   custom_id: neutral_client
+  tags:
+  - upstream_env:it
   jwt_secrets:
   - key: neutral-client-key
     secret: neutral-client-secret

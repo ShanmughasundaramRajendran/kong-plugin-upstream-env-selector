@@ -6,40 +6,7 @@ local threads = require "llthreads2.ex"
 describe("dynamic-routing (integration)", function()
   local admin_client
   local proxy_client
-
-  lazy_setup(function()
-    helpers.get_db_utils(nil, {
-      "routes",
-      "services",
-      "plugins",
-      "upstreams",
-      "targets",
-    }, {
-      "dynamic-routing",
-    })
-
-    assert(helpers.start_kong({
-      plugins = "bundled,dynamic-routing",
-    }))
-  end)
-
-  lazy_teardown(function()
-    helpers.stop_kong()
-  end)
-
-  before_each(function()
-    admin_client = assert(helpers.admin_client())
-    proxy_client = assert(helpers.proxy_client())
-  end)
-
-  after_each(function()
-    if proxy_client then proxy_client:close() end
-    if admin_client then admin_client:close() end
-  end)
-
-  local function json_headers()
-    return { ["Content-Type"] = "application/json" }
-  end
+  local fixture = {}
 
   local function get_available_port()
     local server = assert(socket.bind("127.0.0.1", 0))
@@ -58,18 +25,26 @@ describe("dynamic-routing (integration)", function()
       local client = assert(server:accept())
       client:settimeout(5)
 
+      local headers = {}
       while true do
         local line, err = client:receive("*l")
         if err or line == "" then
           break
         end
+
+        local k, v = line:match("^([^:]+):%s*(.*)$")
+        if k then
+          headers[k:lower()] = v
+        end
       end
 
       local body = backend_name
+      local received_client_id = headers["x-client-id"] or ""
       local resp = "HTTP/1.1 200 OK\r\n"
         .. "Content-Type: text/plain\r\n"
         .. "Content-Length: " .. #body .. "\r\n"
         .. "x-backend: " .. backend_name .. "\r\n"
+        .. "x-received-client-id: " .. received_client_id .. "\r\n"
         .. "Connection: close\r\n\r\n"
         .. body
 
@@ -83,104 +58,253 @@ describe("dynamic-routing (integration)", function()
     return thread
   end
 
-  it("routes by precedence and supports dev/prod/qa selectors", function()
-    local host1, port1 = "127.0.0.1", get_available_port()
-    local host2, port2 = "127.0.0.1", get_available_port()
-    local host3, port3 = "127.0.0.1", get_available_port()
+  local function json_headers()
+    return { ["Content-Type"] = "application/json" }
+  end
 
-    local res = assert(admin_client:post("/upstreams", { body = { name = "orders-api-dev-upstream" }, headers = json_headers() }))
-    assert.res_status(201, res)
-    res = assert(admin_client:post("/upstreams", { body = { name = "orders-api-prod-upstream" }, headers = json_headers() }))
-    assert.res_status(201, res)
-    res = assert(admin_client:post("/upstreams", { body = { name = "orders-api-qa-upstream" }, headers = json_headers() }))
-    assert.res_status(201, res)
-
-    res = assert(admin_client:post("/upstreams/orders-api-dev-upstream/targets", {
-      body = { target = host1 .. ":" .. port1 },
+  local function post_json(client, path, body)
+    local res = assert(client:post(path, {
+      body = body,
       headers = json_headers(),
     }))
     assert.res_status(201, res)
+  end
 
-    res = assert(admin_client:post("/upstreams/orders-api-prod-upstream/targets", {
-      body = { target = host2 .. ":" .. port2 },
-      headers = json_headers(),
+  local function query_string(params)
+    if not params then
+      return ""
+    end
+
+    local pairs_out = {}
+    for k, v in pairs(params) do
+      pairs_out[#pairs_out + 1] = k .. "=" .. v
+    end
+    if #pairs_out == 0 then
+      return ""
+    end
+
+    return "?" .. table.concat(pairs_out, "&")
+  end
+
+  local function request_and_assert(expected_backend, opts)
+    opts = opts or {}
+    local target = fixture.backends[expected_backend]
+    local t = start_backend_once(target.host, target.port, expected_backend)
+
+    socket.sleep(0.05)
+    local path = fixture.route_path .. query_string(opts.query)
+    local res = assert(proxy_client:get(path, {
+      headers = opts.headers,
     }))
-    assert.res_status(201, res)
 
-    res = assert(admin_client:post("/upstreams/orders-api-qa-upstream/targets", {
-      body = { target = host3 .. ":" .. port3 },
-      headers = json_headers(),
+    assert.res_status(200, res)
+    assert.equal(expected_backend, res.headers["x-backend"])
+    if opts.expected_received_client_id ~= nil then
+      assert.equal(opts.expected_received_client_id, res.headers["x-received-client-id"])
+    end
+
+    assert(t:join())
+  end
+
+  local function jwt_for_client_id(client_id)
+    if client_id == "qa_client" then
+      return "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ."
+    end
+
+    if client_id == "it_client" then
+      return "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOiJpdF9jbGllbnQifQ."
+    end
+
+    return nil
+  end
+
+  lazy_setup(function()
+    helpers.get_db_utils(nil, {
+      "routes",
+      "services",
+      "plugins",
+      "upstreams",
+      "targets",
+    }, {
+      "dynamic-routing",
+    })
+
+    assert(helpers.start_kong({
+      plugins = "bundled,dynamic-routing",
     }))
-    assert.res_status(201, res)
 
-    res = assert(admin_client:post("/services", {
-      body = { name = "orders-gateway-service", host = "orders-api-prod-upstream" },
-      headers = json_headers(),
-    }))
-    assert.res_status(201, res)
+    local admin = assert(helpers.admin_client())
+    local suffix = tostring(get_available_port())
 
-    res = assert(admin_client:post("/routes", {
-      body = { service = { name = "orders-gateway-service" }, paths = { "/api/orders" } },
-      headers = json_headers(),
-    }))
-    assert.res_status(201, res)
+    fixture.route_path = "/api/orders-int"
+    fixture.upstreams = {
+      dev = "orders-api-dev-upstream-int-" .. suffix,
+      prod = "orders-api-prod-upstream-int-" .. suffix,
+      qa = "orders-api-qa-upstream-int-" .. suffix,
+      it = "orders-api-it-upstream-int-" .. suffix,
+      perf = "orders-api-perf-upstream-int-" .. suffix,
+    }
 
-    res = assert(admin_client:post("/plugins", {
-      body = {
-        name = "dynamic-routing",
-        config = {
-          upstream_header_name = "X-Upstream-Env",
-          client_id_header_name = "X-Client-Id",
-          upstreams = {
-            dev = "orders-api-dev-upstream",
-            prod = "orders-api-prod-upstream",
-            qa = "orders-api-qa-upstream",
-            qa_client = "orders-api-qa-upstream",
-          },
-          access_policy = { sni = false, header_name = "X-Client-Env", query_param_name = "env" },
-          endpoint = { sni = false, header_name = "X-Resource-Env", query_param_name = "resource_env" },
-        }
+    fixture.backends = {
+      dev = { host = "127.0.0.1", port = get_available_port() },
+      prod = { host = "127.0.0.1", port = get_available_port() },
+      qa = { host = "127.0.0.1", port = get_available_port() },
+      it = { host = "127.0.0.1", port = get_available_port() },
+      perf = { host = "127.0.0.1", port = get_available_port() },
+    }
+
+    for env, upstream_name in pairs(fixture.upstreams) do
+      post_json(admin, "/upstreams", { name = upstream_name })
+      post_json(admin, "/upstreams/" .. upstream_name .. "/targets", {
+        target = fixture.backends[env].host .. ":" .. fixture.backends[env].port,
+      })
+    end
+
+    post_json(admin, "/services", {
+      name = "orders-gateway-service-int-" .. suffix,
+      host = fixture.upstreams.it,
+    })
+
+    post_json(admin, "/routes", {
+      service = { name = "orders-gateway-service-int-" .. suffix },
+      paths = { fixture.route_path },
+    })
+
+    post_json(admin, "/plugins", {
+      name = "dynamic-routing",
+      service = { name = "orders-gateway-service-int-" .. suffix },
+      config = {
+        upstream_header_name = "X-Upstream-Env",
+        client_id_header_name = "X-Client-Id",
+        upstreams = {
+          dev = fixture.upstreams.dev,
+          prod = fixture.upstreams.prod,
+          qa = fixture.upstreams.qa,
+          it = fixture.upstreams.it,
+          perf = fixture.upstreams.perf,
+          qa_client = fixture.upstreams.qa,
+          it_client = fixture.upstreams.it,
+          perf_client = fixture.upstreams.perf,
+        },
+        access_policy = {
+          sni = false,
+          header_name = "X-Client-Env",
+          query_param_name = "env",
+        },
+        endpoint = {
+          sni = false,
+          header_name = "X-Resource-Env",
+          query_param_name = "resource_env",
+        },
       },
-      headers = json_headers(),
-    }))
-    assert.res_status(201, res)
+    })
 
-    local t1 = start_backend_once(host1, port1, "dev")
-    socket.sleep(0.05)
-    res = assert(proxy_client:get("/api/orders", { headers = { ["X-Upstream-Env"] = "dev" } }))
-    assert.res_status(200, res)
-    assert.equal("dev", res.headers["x-backend"])
-    assert(t1:join())
+    admin:close()
+  end)
 
-    local t2 = start_backend_once(host3, port3, "qa")
-    socket.sleep(0.05)
-    res = assert(proxy_client:get("/api/orders", { headers = { ["X-Client-Env"] = "qa" } }))
-    assert.res_status(200, res)
-    assert.equal("qa", res.headers["x-backend"])
-    assert(t2:join())
+  lazy_teardown(function()
+    helpers.stop_kong()
+  end)
 
-    local t3 = start_backend_once(host3, port3, "qa")
-    socket.sleep(0.05)
-    res = assert(proxy_client:get("/api/orders", { headers = { ["X-Client-Id"] = "qa_client" } }))
-    assert.res_status(200, res)
-    assert.equal("qa", res.headers["x-backend"])
-    assert(t3:join())
+  before_each(function()
+    admin_client = assert(helpers.admin_client())
+    proxy_client = assert(helpers.proxy_client())
+  end)
 
-    local t4 = start_backend_once(host3, port3, "qa")
-    socket.sleep(0.05)
-    local jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnQtaWQiOiJxYV9jbGllbnQifQ."
-    res = assert(proxy_client:get("/api/orders", {
-      headers = { ["Authorization"] = "Bearer " .. jwt },
-    }))
-    assert.res_status(200, res)
-    assert.equal("qa", res.headers["x-backend"])
-    assert(t4:join())
+  after_each(function()
+    if proxy_client then proxy_client:close() end
+    if admin_client then admin_client:close() end
+  end)
 
-    local t5 = start_backend_once(host2, port2, "prod")
-    socket.sleep(0.05)
-    res = assert(proxy_client:get("/api/orders"))
-    assert.res_status(200, res)
-    assert.equal("prod", res.headers["x-backend"])
-    assert(t5:join())
+  it("uses primary upstream when no selectors are present", function()
+    request_and_assert("it")
+  end)
+
+  it("selects by default X-Upstream-Env header", function()
+    request_and_assert("dev", {
+      headers = { ["X-Upstream-Env"] = "dev" },
+    })
+  end)
+
+  it("prioritizes default header over access and endpoint selectors", function()
+    request_and_assert("qa", {
+      headers = {
+        ["X-Upstream-Env"] = "qa",
+        ["X-Client-Env"] = "dev",
+        ["X-Resource-Env"] = "prod",
+      },
+      query = {
+        env = "prod",
+        resource_env = "dev",
+      },
+    })
+  end)
+
+  it("uses access policy header before access query", function()
+    request_and_assert("qa", {
+      headers = { ["X-Client-Env"] = "qa" },
+      query = { env = "dev" },
+    })
+  end)
+
+  it("uses access query before endpoint header", function()
+    request_and_assert("dev", {
+      headers = { ["X-Resource-Env"] = "qa" },
+      query = { env = "dev" },
+    })
+  end)
+
+  it("uses endpoint header before endpoint query", function()
+    request_and_assert("qa", {
+      headers = { ["X-Resource-Env"] = "qa" },
+      query = { resource_env = "dev" },
+    })
+  end)
+
+  it("uses endpoint query when higher selectors are absent", function()
+    request_and_assert("dev", {
+      query = { resource_env = "dev" },
+    })
+  end)
+
+  it("falls through invalid higher selectors to valid endpoint query", function()
+    request_and_assert("qa", {
+      headers = {
+        ["X-Client-Env"] = "unknown",
+        ["X-Resource-Env"] = "unknown",
+      },
+      query = {
+        env = "unknown",
+        resource_env = "qa",
+      },
+    })
+  end)
+
+  it("routes by JWT client_id when selector levels do not match", function()
+    request_and_assert("it", {
+      headers = {
+        ["Authorization"] = "Bearer " .. jwt_for_client_id("it_client"),
+      },
+      expected_received_client_id = "it_client",
+    })
+  end)
+
+  it("routes by explicit X-Client-Id when selector levels do not match", function()
+    request_and_assert("perf", {
+      headers = {
+        ["X-Client-Id"] = "perf_client",
+      },
+      expected_received_client_id = "perf_client",
+    })
+  end)
+
+  it("keeps access selector priority above JWT and X-Client-Id", function()
+    request_and_assert("dev", {
+      headers = {
+        ["X-Client-Env"] = "dev",
+        ["X-Client-Id"] = "perf_client",
+        ["Authorization"] = "Bearer " .. jwt_for_client_id("qa_client"),
+      },
+    })
   end)
 end)

@@ -1,0 +1,34 @@
+meta {
+  name: 12-Req-Access Policy SNI To Dev
+  type: http
+  seq: 12
+}
+
+docs {
+  Access-policy SNI routing scenario.
+  Prerequisite: local DNS/hosts entry and TLS verification disabled in Bruno.
+  Expected backend: dev.
+}
+
+get {
+  url: {{sni_access_base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Host: access-sni-dev.local
+  Authorization: Bearer {{jwt_neutral_client}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("routes to dev", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("dev");
+  });
+}

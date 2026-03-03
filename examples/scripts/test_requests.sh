@@ -3,12 +3,12 @@ set -euo pipefail
 
 PROXY="${PROXY:-http://localhost:8000}"
 CURL_OPTS=(--retry 20 --retry-delay 1 --retry-connrefused -s -D -)
-JWT_NEUTRAL="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJuZXV0cmFsLWNsaWVudC1rZXkiLCJjbGllbnQtaWQiOiJuZXV0cmFsX2NsaWVudCIsImV4cCI6MjIwODk4ODgwMH0.7E_691oY_22EDmV289scCNwWrMxnc4s5GXalkK1z08I"
-JWT_DEV="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJkZXYtY2xpZW50LWtleSIsImNsaWVudC1pZCI6ImRldl9jbGllbnQiLCJleHAiOjIyMDg5ODg4MDB9.W4BML7dw6GrEEXmQbnUDPBuj6QDb6zCrVwufUqTAvLQ"
-JWT_PROD="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwcm9kLWNsaWVudC1rZXkiLCJjbGllbnQtaWQiOiJwcm9kX2NsaWVudCIsImV4cCI6MjIwODk4ODgwMH0.IUWl_C_OBt2KZ50EixFZFM1ip-qSm9jh7SXAdlnA-Fk"
-JWT_QA="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJxYS1jbGllbnQta2V5IiwiY2xpZW50LWlkIjoicWFfY2xpZW50IiwiZXhwIjoyMjA4OTg4ODAwfQ.1jdC2PE4GCSsKLRO9-Ea8TQjd-60NvHzfaqYlKtdkS0"
-JWT_STAGING="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdGFnaW5nLWNsaWVudC1rZXkiLCJjbGllbnQtaWQiOiJzdGFnaW5nX2NsaWVudCIsImV4cCI6MjIwODk4ODgwMH0.b0hPdmtVdLiqFKhfPkqWgjbw__2JityYKwt732reZjc"
-JWT_PERF="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwZXJmLWNsaWVudC1rZXkiLCJjbGllbnQtaWQiOiJwZXJmX2NsaWVudCIsImV4cCI6MjIwODk4ODgwMH0.TMfEAl00t2ptHt7DBT4HhXqALrPckLeAEcZ9q83XHQE"
+JWT_NEUTRAL="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJuZXV0cmFsLWNsaWVudC1rZXkiLCJjbGllbnRfaWQiOiJuZXV0cmFsX2NsaWVudCIsImV4cCI6MjIwODk4ODgwMH0.FngrKhY_xwXeTuOiQIshBs1ypUTOOkHvBb2O-tOyAmo"
+JWT_DEV="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJkZXYtY2xpZW50LWtleSIsImNsaWVudF9pZCI6ImRldl9jbGllbnQiLCJleHAiOjIyMDg5ODg4MDB9.yW48zbOdY4y25DWQJ-aBxf2HYZrmQ03hQvnxhPmOqWE"
+JWT_PROD="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwcm9kLWNsaWVudC1rZXkiLCJjbGllbnRfaWQiOiJwcm9kX2NsaWVudCIsImV4cCI6MjIwODk4ODgwMH0.55GEwKqnbUPrVnXwphThR5gPTLAH8FC1gNaiUgqhd8w"
+JWT_QA="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJxYS1jbGllbnQta2V5IiwiY2xpZW50X2lkIjoicWFfY2xpZW50IiwiZXhwIjoyMjA4OTg4ODAwfQ.NLiV9nxno2AsCy3veuEIS1Hl3QEjBbwZAXDaORLUSRc"
+JWT_IT="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJpdC1jbGllbnQta2V5IiwiY2xpZW50X2lkIjoiaXRfY2xpZW50IiwiZXhwIjoyMjA4OTg4ODAwfQ.o-2ZVIQmatMOyeYqIqapRURgbDaczW6UPzBytuCAaH8"
+JWT_PERF="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwZXJmLWNsaWVudC1rZXkiLCJjbGllbnRfaWQiOiJwZXJmX2NsaWVudCIsImV4cCI6MjIwODk4ODgwMH0.m2TlHFM_5Wdsu6MaJ8P9ZngvPMvO3wTMMcLnlYM7T3g"
 
 echo "---- dev via X-Upstream-Env ----"
 curl "${CURL_OPTS[@]}" -H "X-Upstream-Env: dev" -H "Authorization: Bearer ${JWT_NEUTRAL}" "${PROXY}/api/orders" | head -n 20
@@ -30,27 +30,27 @@ echo "---- prod via resource header X-Resource-Env ----"
 curl "${CURL_OPTS[@]}" -H "X-Resource-Env: prod" -H "Authorization: Bearer ${JWT_NEUTRAL}" "${PROXY}/api/orders" | head -n 20
 echo
 
-echo "---- dev via JWT claim client-id=dev_client ----"
+echo "---- dev via JWT claim client_id=dev_client ----"
 curl "${CURL_OPTS[@]}" -H "Authorization: Bearer ${JWT_DEV}" "${PROXY}/api/orders" | head -n 20
 echo
 
-echo "---- prod via JWT claim client-id=prod_client ----"
+echo "---- prod via JWT claim client_id=prod_client ----"
 curl "${CURL_OPTS[@]}" -H "Authorization: Bearer ${JWT_PROD}" "${PROXY}/api/orders" | head -n 20
 echo
 
-echo "---- qa via JWT claim client-id=qa_client ----"
+echo "---- qa via JWT claim client_id=qa_client ----"
 curl "${CURL_OPTS[@]}" -H "Authorization: Bearer ${JWT_QA}" "${PROXY}/api/orders" | head -n 20
 echo
 
-echo "---- staging via JWT claim client-id=staging_client ----"
-curl "${CURL_OPTS[@]}" -H "Authorization: Bearer ${JWT_STAGING}" "${PROXY}/api/orders" | head -n 20
+echo "---- it via JWT claim client_id=it_client ----"
+curl "${CURL_OPTS[@]}" -H "Authorization: Bearer ${JWT_IT}" "${PROXY}/api/orders" | head -n 20
 echo
 
-echo "---- perf via JWT claim client-id=perf_client ----"
+echo "---- perf via JWT claim client_id=perf_client ----"
 curl "${CURL_OPTS[@]}" -H "Authorization: Bearer ${JWT_PERF}" "${PROXY}/api/orders" | head -n 20
 echo
 
-echo "---- default header overrides JWT client-id ----"
+echo "---- default header overrides JWT client_id ----"
 curl "${CURL_OPTS[@]}" -H "X-Upstream-Env: qa" -H "Authorization: Bearer ${JWT_DEV}" "${PROXY}/api/orders" | head -n 20
 echo
 

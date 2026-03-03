@@ -1,0 +1,32 @@
+meta {
+  name: 01-Req-Default Route (No Selectors)
+  type: http
+  seq: 1
+}
+
+docs {
+  Verify base behavior when no selector headers/query are provided.
+  Expected backend: it (service default upstream).
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Authorization: Bearer {{jwt_neutral_client}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("routes to it", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("it");
+  });
+}

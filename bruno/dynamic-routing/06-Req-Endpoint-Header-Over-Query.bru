@@ -1,0 +1,37 @@
+meta {
+  name: 06-Req-Endpoint Header Over Query
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+params:query {
+  resource_env: dev
+}
+
+headers {
+  Accept: application/json
+  X-Resource-Env: qa
+  Authorization: Bearer {{jwt_neutral_client}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("routes to qa", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("qa");
+  });
+}
+
+docs {
+  Endpoint header X-Resource-Env should win over endpoint query resource_env.
+  Expected backend: qa.
+}

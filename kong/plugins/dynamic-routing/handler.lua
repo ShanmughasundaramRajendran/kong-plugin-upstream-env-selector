@@ -17,6 +17,7 @@ local BY_HEADER = "header_name"
 local BY_QPARAM_NAME = "query_param_name"
 local DEFAULT_UPSTREAM_HEADER_NAME = "X-Upstream-Env"
 local DEFAULT_CLIENT_ID_HEADER_NAME = "X-Client-Id"
+local UPSTREAM_ENV_TAG_PREFIX = "upstream_env:"
 local B64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 local function is_non_empty_string(v)
@@ -131,9 +132,31 @@ local function get_jwt_claim_client_id()
     return nil
   end
 
-  local client_id = payload["client-id"]
+  local client_id = payload["client_id"]
   if type(client_id) == "string" and client_id ~= "" then
     return client_id
+  end
+
+  return nil
+end
+
+local function get_consumer_upstream_env(consumer)
+  if type(consumer) ~= "table" then
+    return nil
+  end
+
+  local tags = consumer.tags
+  if type(tags) ~= "table" then
+    return nil
+  end
+
+  for _, tag in ipairs(tags) do
+    if type(tag) == "string" and tag:sub(1, #UPSTREAM_ENV_TAG_PREFIX) == UPSTREAM_ENV_TAG_PREFIX then
+      local env = tag:sub(#UPSTREAM_ENV_TAG_PREFIX + 1)
+      if is_non_empty_string(env) then
+        return env
+      end
+    end
   end
 
   return nil
@@ -258,16 +281,23 @@ local function get_client_id(cfg)
     return client_id
   end
 
+  local consumer
+  if kong.client and kong.client.get_consumer then
+    consumer = kong.client.get_consumer()
+  end
+
+  local consumer_upstream_env = get_consumer_upstream_env(consumer)
+  if consumer_upstream_env then
+    return consumer_upstream_env
+  end
+
   client_id = get_jwt_claim_client_id()
   if client_id then
     return client_id
   end
 
-  if kong.client and kong.client.get_consumer then
-    local consumer = kong.client.get_consumer()
-    if consumer then
-      return first_non_empty_string({ consumer.custom_id, consumer.username, consumer.id })
-    end
+  if consumer then
+    return first_non_empty_string({ consumer.custom_id, consumer.username, consumer.id })
   end
 
   return nil
@@ -279,7 +309,7 @@ function _M:access(cfg)
   -- 1) default header
   -- 2) access policy (sni -> header -> query)
   -- 3) endpoint policy (sni -> header -> query)
-  -- 4) client-id chain (header -> jwt claim -> consumer)
+  -- 4) client_id chain (header -> jwt claim -> consumer)
   if type(cfg) ~= "table" then
     kong.log.debug("dynamic-routing: No config loaded")
     return

@@ -25,7 +25,7 @@ services:
       - orders_api_dev
       - orders_api_prod
       - orders_api_qa
-      - orders_api_staging
+      - orders_api_it
       - orders_api_perf
 
   orders_api_dev:
@@ -52,11 +52,11 @@ services:
     ports:
       - "8082:8080"
 
-  orders_api_staging:
+  orders_api_it:
     image: ealen/echo-server:latest
     environment:
       PORT: "8080"
-      ECHO_RESPONSE: "staging"
+      ECHO_RESPONSE: "it"
     ports:
       - "8083:8080"
 

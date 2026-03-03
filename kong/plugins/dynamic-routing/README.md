@@ -16,7 +16,7 @@ The plugin evaluates selectors in this order:
 5. `endpoint.sni`
 6. `endpoint.header_name`
 7. `endpoint.query_param_name`
-8. `X-Client-Id`; if missing, JWT claim `client-id` from `Authorization` (then authenticated consumer fields as fallback)
+8. `X-Client-Id`; if missing, authenticated consumer tag `upstream_env:<key>`; then JWT claim `client_id` from `Authorization` (then authenticated consumer fields as fallback)
 
 When a selector value matches a key in `config.upstreams`,
 `kong.service.set_upstream(<mapped_upstream_name>)` is called.
@@ -55,7 +55,8 @@ plugins:
 If you enable Kong `jwt` auth, keep consumer credentials and signed tokens aligned:
 
 - JWT `iss` must match the consumer JWT key.
-- JWT payload should include `client-id` claim (for this plugin to map).
+- JWT payload should include `client_id` claim (for this plugin to map).
+- Optional and recommended: set consumer tags in Kong as `upstream_env:<key>` to maintain environment mapping in consumer application configuration.
 
 ## Unit Tests
 

@@ -1,0 +1,37 @@
+meta {
+  name: 05-Req-Access Query Over Endpoint Header
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+params:query {
+  env: dev
+}
+
+headers {
+  Accept: application/json
+  X-Resource-Env: qa
+  Authorization: Bearer {{jwt_neutral_client}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("routes to dev", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("dev");
+  });
+}
+
+docs {
+  Access query env is evaluated before endpoint header X-Resource-Env.
+  Expected backend: dev.
+}

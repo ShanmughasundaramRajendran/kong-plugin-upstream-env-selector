@@ -16,7 +16,7 @@ The plugin checks selectors in this order and picks the first matching upstream 
 5. `endpoint.sni`
 6. `endpoint.header_name`
 7. `endpoint.query_param_name`
-8. `X-Client-Id` header; if absent, plugin extracts JWT claim `client-id` from `Authorization: Bearer <token>` (then authenticated consumer id/custom_id/username fallback)
+8. `X-Client-Id` header; if absent, plugin extracts JWT claim `client_id` from `Authorization: Bearer <token>` (then authenticated consumer id/custom_id/username fallback)
 
 If nothing matches, it does not block the request; Kong keeps default routing.
 
@@ -33,7 +33,7 @@ Endpoints:
 - Dev echo backend: `http://localhost:8080`
 - Prod echo backend: `http://localhost:8081`
 - QA echo backend: `http://localhost:8082`
-- Staging echo backend: `http://localhost:8083`
+- IT echo backend: `http://localhost:8083`
 - Perf echo backend: `http://localhost:8084`
 
 Declarative config used by docker compose:
@@ -44,7 +44,7 @@ Notes:
 
 - JWT auth plugin is enabled on `orders-gateway-service`.
 - Kong consumers and JWT credentials are declared in `config/kong.yml`.
-- `client-id` claim in the JWT drives upstream selection when `X-Client-Id` is not sent.
+- `client_id` claim in the JWT drives upstream selection when `X-Client-Id` is not sent.
 
 Stop stack:
 
@@ -94,15 +94,17 @@ make test-all
 
 - `bruno/dynamic-routing/bruno.json`
 - `bruno/dynamic-routing/environments/local.bru`
-- requests `01..11` (simplified set):
-- default header routing
-- access policy header/query routing
-- endpoint header/query routing
-- JWT `client-id` routing
-- priority override (`X-Upstream-Env` over JWT)
-- no-selector default route behavior
+- customer run guide: [bruno/dynamic-routing/README.md](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/bruno/dynamic-routing/README.md)
+- requests `01..13` (`01-Req-...` naming):
+- default route behavior with no selectors
+- default header routing and default-header-overrides-all precedence
+- access policy header/query precedence
+- endpoint policy header/query precedence
+- fallback when higher-priority selectors are invalid
+- JWT `client_id` routing and explicit `X-Client-Id` routing
+- selector precedence over JWT/`X-Client-Id`
 - access-policy SNI routing
-- endpoint SNI routing (separate route `/api/orders-endpoint-sni`)
+- endpoint-policy SNI routing (route `/api/orders-endpoint-sni`)
 
 SNI Bruno setup:
 
@@ -118,7 +120,7 @@ Client-id mappings in `config/kong.yml` include:
 - `dev_client` -> `dev`
 - `prod_client` -> `prod`
 - `qa_client` -> `qa`
-- `staging_client` -> `staging`
+- `it_client` -> `it`
 - `perf_client` -> `perf`
 
 Kong consumer apps declared in `config/kong.yml`:
@@ -126,9 +128,9 @@ Kong consumer apps declared in `config/kong.yml`:
 - `dev-client-app`
 - `prod-client-app`
 - `qa-client-app`
-- `staging-client-app`
+- `it-client-app`
 - `perf-client-app`
-- `neutral-client-app` (auth-only token used for non-client-id selector tests)
+- `neutral-client-app` (auth-only token used for non-client_id selector tests)
 
 ## Useful Overrides
 

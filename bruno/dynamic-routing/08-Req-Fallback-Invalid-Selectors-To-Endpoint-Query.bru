@@ -1,0 +1,39 @@
+meta {
+  name: 08-Req-Fallback Invalid Selectors To Endpoint Query
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+params:query {
+  env: unknown
+  resource_env: qa
+}
+
+headers {
+  Accept: application/json
+  X-Client-Env: unknown
+  X-Resource-Env: unknown
+  Authorization: Bearer {{jwt_neutral_client}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("routes to qa", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("qa");
+  });
+}
+
+docs {
+  Invalid high-priority selectors should fall through to a valid lower selector.
+  Expected backend: qa via resource_env query.
+}

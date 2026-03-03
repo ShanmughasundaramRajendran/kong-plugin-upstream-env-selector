@@ -1,0 +1,40 @@
+meta {
+  name: 03-Req-Default Header Overrides All
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{base_url}}/api/orders
+  body: none
+  auth: none
+}
+
+params:query {
+  env: prod
+  resource_env: dev
+}
+
+headers {
+  Accept: application/json
+  X-Upstream-Env: qa
+  X-Client-Env: qa
+  X-Resource-Env: prod
+  Authorization: Bearer {{jwt_neutral_client}}
+}
+
+tests {
+  test("status is 200", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+  
+  test("routes to qa", function() {
+    const body = JSON.parse(res.getBody());
+    expect(body.environment.ECHO_RESPONSE).to.equal("qa");
+  });
+}
+
+docs {
+  Default header has highest priority over access/endpoint selectors.
+  Expected backend: qa.
+}
