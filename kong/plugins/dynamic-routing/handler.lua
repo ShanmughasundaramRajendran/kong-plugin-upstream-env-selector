@@ -4,7 +4,9 @@ local cjson = require "cjson.safe"
 
 local _M = {
   VERSION = "1.0.0",
-  PRIORITY = 2003,
+  -- Must run after OpenID Connect (OIDC priority is 1000) so introspection
+  -- headers/consumer context are already available for dynamic routing.
+  PRIORITY = 900,
 }
 
 -- Plugin lifecycle notes:
@@ -17,6 +19,7 @@ local BY_HEADER = "header_name"
 local BY_QPARAM_NAME = "query_param_name"
 local DEFAULT_UPSTREAM_HEADER_NAME = "X-Upstream-Env"
 local DEFAULT_CLIENT_ID_HEADER_NAME = "X-Client-Id"
+local DEFAULT_INTROSPECTION_HEADER_NAME = "X-Kong-Introspection-Response"
 local UPSTREAM_ENV_TAG_PREFIX = "upstream_env:"
 local B64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
@@ -80,64 +83,26 @@ local function decode_base64(data)
   end)
 end
 
-local function b64url_decode(input)
-  if type(input) ~= "string" or input == "" then
+local function get_introspection_claim_client_id(cfg)
+  local header_name = (cfg and cfg.introspection_header_name) or DEFAULT_INTROSPECTION_HEADER_NAME
+  local encoded = first_non_empty_string(kong.request.get_header(header_name))
+  if not encoded then
     return nil
   end
 
-  local data = input:gsub("-", "+"):gsub("_", "/")
-  local mod = #data % 4
-  if mod == 2 then
-    data = data .. "=="
-  elseif mod == 3 then
-    data = data .. "="
-  elseif mod ~= 0 then
+  local decoded_json = decode_base64(encoded)
+  if not decoded_json then
+    kong.log.err("dynamic-routing: failed to decode introspection header: ", header_name)
     return nil
   end
 
-  return decode_base64(data)
-end
-
-local function get_jwt_claim_client_id()
-  local auth = kong.request.get_header("authorization") or kong.request.get_header("Authorization")
-  if type(auth) == "table" then
-    auth = auth[1]
-  end
-
-  if type(auth) ~= "string" then
+  local claims = cjson.decode(decoded_json)
+  if type(claims) ~= "table" then
+    kong.log.err("dynamic-routing: failed to parse introspection JSON from header: ", header_name)
     return nil
   end
 
-  local token = auth:match("^[Bb]earer%s+(.+)$")
-  if not token then
-    return nil
-  end
-
-  local parts = {}
-  for part in token:gmatch("[^%.]+") do
-    parts[#parts + 1] = part
-  end
-
-  if #parts < 2 then
-    return nil
-  end
-
-  local payload_json = b64url_decode(parts[2])
-  if not payload_json then
-    return nil
-  end
-
-  local payload = cjson.decode(payload_json)
-  if type(payload) ~= "table" then
-    return nil
-  end
-
-  local client_id = payload["client_id"]
-  if type(client_id) == "string" and client_id ~= "" then
-    return client_id
-  end
-
-  return nil
+  return first_non_empty_string(claims.client_id)
 end
 
 local function get_consumer_upstream_env(consumer)
@@ -281,6 +246,11 @@ local function get_client_id(cfg)
     return client_id
   end
 
+  client_id = get_introspection_claim_client_id(cfg)
+  if client_id then
+    return client_id
+  end
+
   local consumer
   if kong.client and kong.client.get_consumer then
     consumer = kong.client.get_consumer()
@@ -289,11 +259,6 @@ local function get_client_id(cfg)
   local consumer_upstream_env = get_consumer_upstream_env(consumer)
   if consumer_upstream_env then
     return consumer_upstream_env
-  end
-
-  client_id = get_jwt_claim_client_id()
-  if client_id then
-    return client_id
   end
 
   if consumer then
@@ -309,7 +274,7 @@ function _M:access(cfg)
   -- 1) default header
   -- 2) access policy (sni -> header -> query)
   -- 3) endpoint policy (sni -> header -> query)
-  -- 4) client_id chain (header -> jwt claim -> consumer)
+  -- 4) client_id chain (X-Client-Id -> OIDC introspection claim -> consumer)
   if type(cfg) ~= "table" then
     kong.log.debug("dynamic-routing: No config loaded")
     return

@@ -176,6 +176,7 @@ describe("dynamic-routing (integration)", function()
       config = {
         upstream_header_name = "X-Upstream-Env",
         client_id_header_name = "X-Client-Id",
+        introspection_header_name = "X-Introspection-Response",
         upstreams = {
           dev = fixture.upstreams.dev,
           prod = fixture.upstreams.prod,
@@ -280,12 +281,21 @@ describe("dynamic-routing (integration)", function()
     })
   end)
 
-  it("routes by JWT client_id when selector levels do not match", function()
+  it("keeps default upstream when only bearer token is present without introspection header", function()
     request_and_assert("it", {
       headers = {
         ["Authorization"] = "Bearer " .. jwt_for_client_id("it_client"),
       },
-      expected_received_client_id = "it_client",
+    })
+  end)
+
+  it("routes by OIDC introspection header client_id when selectors are absent", function()
+    request_and_assert("perf", {
+      headers = {
+        ["Authorization"] = "Bearer " .. jwt_for_client_id("qa_client"),
+        ["X-Introspection-Response"] = "eyJjbGllbnRfaWQiOiJwZXJmX2NsaWVudCJ9",
+      },
+      expected_received_client_id = "perf_client",
     })
   end)
 

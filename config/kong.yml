@@ -52,6 +52,7 @@ plugins:
   config:
     upstream_header_name: X-Upstream-Env
     client_id_header_name: X-Client-Id
+    introspection_header_name: X-Introspection-Response
     upstreams:
       dev: orders-api-dev-upstream
       prod: orders-api-prod-upstream
@@ -77,6 +78,7 @@ plugins:
   config:
     upstream_header_name: X-Upstream-Env
     client_id_header_name: X-Client-Id
+    introspection_header_name: X-Introspection-Response
     upstreams:
       dev: orders-api-dev-upstream
       prod: orders-api-prod-upstream

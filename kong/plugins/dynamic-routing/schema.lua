@@ -50,6 +50,12 @@ return {
               default = "X-Client-Id",
             }
           },
+          { introspection_header_name = {
+              type = "string",
+              required = false,
+              default = "X-Kong-Introspection-Response",
+            }
+          },
         },
       }
     },

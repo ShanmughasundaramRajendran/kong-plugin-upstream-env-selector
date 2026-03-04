@@ -25,7 +25,10 @@ describe("dynamic-routing (unit)", function()
           end,
         },
       },
-      log = { debug = function() end },
+      log = {
+        debug = function() end,
+        err = function() end,
+      },
       ctx = { shared = {} },
     }
 
@@ -58,6 +61,7 @@ describe("dynamic-routing (unit)", function()
       },
       upstream_header_name = "X-Upstream-Env",
       client_id_header_name = "X-Client-Id",
+      introspection_header_name = "X-Introspection-Response",
       access_policy = {
         sni = true,
         header_name = "X-Client-Env",
@@ -190,14 +194,13 @@ describe("dynamic-routing (unit)", function()
     assert.equal("dev_client", set_header_calls["X-Client-Id"])
   end)
 
-  it("falls back to JWT claim client_id when client id header is absent", function()
+  it("falls back to introspection claim client_id when client id header is absent", function()
     local selected
-    local jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
-      .. ".eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ."
+    local introspection_payload = "eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ=="
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "authorization" then
-          return "Bearer " .. jwt
+        if name == "X-Introspection-Response" then
+          return introspection_payload
         end
       end,
       get_consumer = function()
@@ -232,14 +235,13 @@ describe("dynamic-routing (unit)", function()
     assert.equal("qa", set_header_calls["X-Client-Id"])
   end)
 
-  it("consumer upstream_env tag takes precedence over JWT claim", function()
+  it("introspection claim takes precedence over consumer upstream_env tag", function()
     local selected
-    local jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
-      .. ".eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0."
+    local introspection_payload = "eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0="
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "authorization" then
-          return "Bearer " .. jwt
+        if name == "X-Introspection-Response" then
+          return introspection_payload
         end
       end,
       get_consumer = function()
@@ -253,22 +255,21 @@ describe("dynamic-routing (unit)", function()
     })
 
     plugin:access(cfg)
-    assert.equal("up-prod", selected)
+    assert.equal("up-dev", selected)
     assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
-    assert.equal("prod", set_header_calls["X-Client-Id"])
+    assert.equal("dev_client", set_header_calls["X-Client-Id"])
   end)
 
-  it("falls back to JWT claim client_id when client id header is empty", function()
+  it("falls back to introspection claim client_id when client id header is empty", function()
     local selected
-    local jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0"
-      .. ".eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0."
+    local introspection_payload = "eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0="
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Client-Id" then
           return ""
         end
-        if name == "authorization" then
-          return "Bearer " .. jwt
+        if name == "X-Introspection-Response" then
+          return introspection_payload
         end
       end,
       ngx = { var = {} },
@@ -383,16 +384,16 @@ describe("dynamic-routing (unit)", function()
     assert.equal("resource_query", kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("authorization table uses first bearer value for JWT client_id extraction", function()
+  it("introspection header table uses first value for client_id extraction", function()
     local selected
-    local qa_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ."
-    local prod_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOiJwcm9kX2NsaWVudCJ9."
+    local qa_introspection = "eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ=="
+    local prod_introspection = "eyJjbGllbnRfaWQiOiJwcm9kX2NsaWVudCJ9"
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "authorization" then
+        if name == "X-Introspection-Response" then
           return {
-            "Bearer " .. qa_jwt,
-            "Bearer " .. prod_jwt,
+            qa_introspection,
+            prod_introspection,
           }
         end
       end,
@@ -405,12 +406,12 @@ describe("dynamic-routing (unit)", function()
     assert.equal("qa_client", set_header_calls["X-Client-Id"])
   end)
 
-  it("ignores malformed JWT payload and falls back to authenticated consumer", function()
+  it("ignores malformed introspection payload and falls back to authenticated consumer", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "authorization" then
-          return "Bearer aaa.x.ccc"
+        if name == "X-Introspection-Response" then
+          return "###invalid###"
         end
       end,
       get_consumer = function()
@@ -425,13 +426,13 @@ describe("dynamic-routing (unit)", function()
     assert.equal("prod_client", set_header_calls["X-Client-Id"])
   end)
 
-  it("ignores JWT without string client_id and falls back to consumer", function()
+  it("ignores introspection payload without string client_id and falls back to consumer", function()
     local selected
-    local non_string_client_id_jwt = "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOjEyM30."
+    local non_string_client_id_claim = "eyJjbGllbnRfaWQiOjEyM30="
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "authorization" then
-          return "Bearer " .. non_string_client_id_jwt
+        if name == "X-Introspection-Response" then
+          return non_string_client_id_claim
         end
       end,
       get_consumer = function()

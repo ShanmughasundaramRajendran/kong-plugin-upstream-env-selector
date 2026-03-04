@@ -161,13 +161,28 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
     assertOkAndBackend(response, body, "qa");
   });
 
-  it("should route by JWT client_id when no higher selectors match", async function () {
+  it("should route by authenticated consumer mapping when no higher selectors match", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
         Authorization: `Bearer ${createJwtWithClientId("it_client")}`,
       },
     });
     assertOkAndBackend(response, body, "it");
+  });
+
+  it("should route by OIDC introspection client_id when header is present", async function () {
+    const introspection = Buffer.from(JSON.stringify({
+      client_id: "perf_client",
+      active: true,
+    })).toString("base64");
+
+    const { response, body } = await getRoute(ROUTE_PATH, {
+      headers: {
+        Authorization: `Bearer ${createJwtWithClientId("neutral_client")}`,
+        "X-Introspection-Response": introspection,
+      },
+    });
+    assertOkAndBackend(response, body, "perf");
   });
 
   it("should route by explicit X-Client-Id header when no higher selectors match", async function () {
