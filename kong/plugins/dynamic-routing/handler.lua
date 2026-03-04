@@ -21,7 +21,6 @@ local DEFAULT_UPSTREAM_HEADER_NAME = "X-Upstream-Env"
 local DEFAULT_CLIENT_ID_HEADER_NAME = "X-Client-Id"
 local DEFAULT_INTROSPECTION_HEADER_NAME = "X-Kong-Introspection-Response"
 local UPSTREAM_ENV_TAG_PREFIX = "upstream_env:"
-local B64CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 local function is_non_empty_string(v)
   return type(v) == "string" and v ~= ""
@@ -44,43 +43,20 @@ local function first_non_empty_string(value)
 end
 
 local function decode_base64(data)
+  if type(data) ~= "string" or data == "" then
+    return nil
+  end
+
   if ngx and ngx.decode_base64 then
     return ngx.decode_base64(data)
   end
 
-  data = data:gsub("[^" .. B64CHARS .. "=]", "")
-  local bitstr = data:gsub(".", function(x)
-    if x == "=" then
-      return ""
-    end
+  local ok, mime = pcall(require, "mime")
+  if ok and mime and mime.unb64 then
+    return mime.unb64(data)
+  end
 
-    local idx = B64CHARS:find(x, 1, true)
-    if not idx then
-      return ""
-    end
-
-    local n = idx - 1
-    local bits = ""
-    for i = 6, 1, -1 do
-      bits = bits .. (n % 2^i - n % 2^(i - 1) > 0 and "1" or "0")
-    end
-    return bits
-  end)
-
-  return bitstr:gsub("%d%d%d?%d?%d?%d?%d?%d?", function(x)
-    if #x ~= 8 then
-      return ""
-    end
-
-    local c = 0
-    for i = 1, 8 do
-      if x:sub(i, i) == "1" then
-        c = c + 2^(8 - i)
-      end
-    end
-
-    return string.char(c)
-  end)
+  return nil
 end
 
 local function get_introspection_claim_client_id(cfg)
