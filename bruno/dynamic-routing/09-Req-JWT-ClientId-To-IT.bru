@@ -5,7 +5,7 @@ meta {
 }
 
 docs {
-  JWT claim client_id drives routing when selector layers do not match.
+  OIDC introspection response client_id drives routing when selector layers do not match.
   Expected backend: it.
 }
 
@@ -17,7 +17,8 @@ get {
 
 headers {
   Accept: application/json
-  Authorization: Bearer {{jwt_it_client}}
+  Authorization: Bearer {{jwt_neutral_client}}
+  X-Introspection-Response: eyJjbGllbnRfaWQiOiJpdF9jbGllbnQiLCJhY3RpdmUiOnRydWV9
 }
 
 tests {

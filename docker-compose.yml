@@ -1,5 +1,19 @@
 
 services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: kong-dynamic-routing-keycloak
+    command:
+      - start-dev
+      - --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8085:8080"
+    volumes:
+      - ./config/keycloak:/opt/keycloak/data/import:ro
+
   kong:
     build: .
     image: kong-dynamic-routing:latest
@@ -22,6 +36,7 @@ services:
       - ./kong/plugins/dynamic-routing:/usr/local/share/lua/5.1/kong/plugins/dynamic-routing:ro
       - ./config:/kong/config:ro
     depends_on:
+      - keycloak
       - orders_api_dev
       - orders_api_prod
       - orders_api_qa

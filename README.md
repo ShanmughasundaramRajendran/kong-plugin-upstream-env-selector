@@ -16,7 +16,7 @@ The plugin checks selectors in this order and picks the first matching upstream 
 5. `endpoint.sni`
 6. `endpoint.header_name`
 7. `endpoint.query_param_name`
-8. `X-Client-Id` header; if absent, plugin extracts JWT claim `client_id` from `Authorization: Bearer <token>` (then authenticated consumer id/custom_id/username fallback)
+8. `X-Client-Id` header; if absent, plugin extracts `client_id` from OIDC introspection response header (then authenticated consumer tag/id fallback)
 
 If nothing matches, it does not block the request; Kong keeps default routing.
 
@@ -30,6 +30,7 @@ Endpoints:
 
 - Proxy: `http://localhost:8000`
 - Admin API: `http://localhost:8001`
+- Keycloak: `http://localhost:8085`
 - Dev echo backend: `http://localhost:8080`
 - Prod echo backend: `http://localhost:8081`
 - QA echo backend: `http://localhost:8082`
@@ -42,9 +43,33 @@ Declarative config used by docker compose:
 
 Notes:
 
-- JWT auth plugin is enabled on `orders-gateway-service`.
-- Kong consumers and JWT credentials are declared in `config/kong.yml`.
-- `client_id` claim in the JWT drives upstream selection when `X-Client-Id` is not sent.
+- Local Keycloak is provisioned from `config/keycloak/kong-local-realm.json`.
+- OIDC plugin entries point to local Keycloak via `http://host.docker.internal:8085` (from inside Kong container) and use `kong-introspector` client credentials.
+- OIDC plugins are `enabled: false` by default; set `enabled: true` in `config/kong.yml` to enforce token validation.
+- Dynamic-routing reads `client_id` from the configured introspection response header when `X-Client-Id` is not sent.
+
+## Local Keycloak Credentials
+
+- Admin console: `http://localhost:8085/admin`
+- Admin username: `admin`
+- Admin password: `admin`
+- Realm: `kong-local`
+- Introspection client: `kong-introspector`
+- Introspection client secret: `kong-introspector-secret`
+
+Client credentials for local token generation:
+
+- `neutral_client` / `neutral-client-secret`
+- `dev_client` / `dev-client-secret`
+- `qa_client` / `qa-client-secret`
+- `it_client` / `it-client-secret`
+- `perf_client` / `perf-client-secret`
+
+Get token example:
+
+```bash
+examples/scripts/get_keycloak_token.sh it_client
+```
 
 Stop stack:
 
@@ -101,8 +126,8 @@ make test-all
 - access policy header/query precedence
 - endpoint policy header/query precedence
 - fallback when higher-priority selectors are invalid
-- JWT `client_id` routing and explicit `X-Client-Id` routing
-- selector precedence over JWT/`X-Client-Id`
+- OIDC introspection `client_id` routing and explicit `X-Client-Id` routing
+- selector precedence over OIDC-derived `client_id`/`X-Client-Id`
 - access-policy SNI routing
 - endpoint-policy SNI routing (route `/api/orders-endpoint-sni`)
 

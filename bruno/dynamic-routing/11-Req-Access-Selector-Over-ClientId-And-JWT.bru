@@ -5,7 +5,7 @@ meta {
 }
 
 docs {
-  Access selector precedence should override X-Client-Id and JWT client_id values.
+  Access selector precedence should override X-Client-Id and OIDC introspection client_id values.
   Expected backend: dev (from X-Client-Env).
 }
 
@@ -19,7 +19,8 @@ headers {
   Accept: application/json
   X-Client-Env: dev
   X-Client-Id: perf_client
-  Authorization: Bearer {{jwt_qa_client}}
+  Authorization: Bearer {{jwt_neutral_client}}
+  X-Introspection-Response: eyJjbGllbnRfaWQiOiJxYV9jbGllbnQiLCJhY3RpdmUiOnRydWV9
 }
 
 tests {

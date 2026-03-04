@@ -26,12 +26,12 @@ This collection validates upstream selection precedence for the `dynamic-routing
 | 06 | `06-Req-Endpoint-Header-Over-Query.bru` | Endpoint header over endpoint query | `qa` |
 | 07 | `07-Req-Endpoint-Query-To-Dev.bru` | Endpoint query fallback | `dev` |
 | 08 | `08-Req-Fallback-Invalid-Selectors-To-Endpoint-Query.bru` | Invalid higher selectors fall through to valid lower selector | `qa` |
-| 09 | `09-Req-JWT-ClientId-To-IT.bru` | JWT `client_id` routing | `it` |
+| 09 | `09-Req-JWT-ClientId-To-IT.bru` | OIDC introspection `client_id` routing | `it` |
 | 10 | `10-Req-ClientId-Header-To-Perf.bru` | Explicit `X-Client-Id` routing | `perf` |
-| 11 | `11-Req-Access-Selector-Over-ClientId-And-JWT.bru` | Selector precedence over JWT and `X-Client-Id` | `dev` |
+| 11 | `11-Req-Access-Selector-Over-ClientId-And-JWT.bru` | Selector precedence over OIDC `client_id` and `X-Client-Id` | `dev` |
 | 12 | `12-Req-Access-Policy-SNI-To-Dev.bru` | Access-policy SNI routing | `dev` |
 | 13 | `13-Req-Endpoint-Policy-SNI-To-QA.bru` | Endpoint-policy SNI routing | `qa` |
-| 14 | `14-Req-Consumer-Tag-Over-JWT-Claim.bru` | Consumer `upstream_env` tag precedence over JWT `client_id` claim | `it` |
+| 14 | `14-Req-Consumer-Tag-Over-JWT-Claim.bru` | Consumer `upstream_env` fallback when no selector and no introspection header | `it` |
 
 ## Notes
 

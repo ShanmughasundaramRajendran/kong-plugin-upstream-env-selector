@@ -195,7 +195,7 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
     assertOkAndBackend(response, body, "perf");
   });
 
-  it("should keep JWT/client_id as lower priority than selectors", async function () {
+  it("should keep OIDC client_id/X-Client-Id as lower priority than selectors", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
         "X-Client-Env": "dev",

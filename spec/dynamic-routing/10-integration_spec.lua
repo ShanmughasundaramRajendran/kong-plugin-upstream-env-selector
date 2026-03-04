@@ -308,7 +308,7 @@ describe("dynamic-routing (integration)", function()
     })
   end)
 
-  it("keeps access selector priority above JWT and X-Client-Id", function()
+  it("keeps access selector priority above OIDC client_id and X-Client-Id", function()
     request_and_assert("dev", {
       headers = {
         ["X-Client-Env"] = "dev",

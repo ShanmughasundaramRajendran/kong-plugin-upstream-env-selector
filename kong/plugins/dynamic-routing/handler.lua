@@ -4,9 +4,10 @@ local cjson = require "cjson.safe"
 
 local _M = {
   VERSION = "1.0.0",
-  -- Must run after OpenID Connect (OIDC priority is 1000) so introspection
-  -- headers/consumer context are already available for dynamic routing.
-  PRIORITY = 900,
+  -- Must run after OpenID Connect so introspection headers/consumer context
+  -- are available before dynamic upstream selection.
+  -- Keep this intentionally below OIDC across Kong versions.
+  PRIORITY = 800,
 }
 
 -- Plugin lifecycle notes:
