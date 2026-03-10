@@ -36,6 +36,34 @@ upstreams:
   - target: orders_api_perf:8080
 
 plugins:
+- name: openid-connect
+  service: orders-gateway-service
+  enabled: false
+  tags:
+  - placeholder
+  - oidc
+  config:
+    # Local Keycloak config for testing from inside Kong container.
+    # Docker Desktop resolves host Keycloak via host.docker.internal.
+    # Switch `enabled` to true when you want Kong to enforce OIDC.
+    auth_methods:
+    - introspection
+    bearer_token_param_type:
+    - header
+    bearer_token_type:
+    - bearer
+    issuer: http://host.docker.internal:8085/realms/kong-local
+    client_id:
+    - kong-introspector
+    client_secret:
+    - kong-introspector-secret
+    introspection_endpoint: http://host.docker.internal:8085/realms/kong-local/protocol/openid-connect/token/introspect
+    # Dynamic-routing reads client_id from this header (base64 JSON introspection response).
+    # Keep this aligned with dynamic-routing `introspection_header_name`.
+    upstream_headers_claims:
+    - client_id
+    upstream_headers_names:
+    - X-Introspection-Response
 - name: dynamic-routing
   service: orders-gateway-service
   config:

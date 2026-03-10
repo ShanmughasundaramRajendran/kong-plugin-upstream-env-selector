@@ -16,7 +16,7 @@ The plugin evaluates selectors in this order:
 5. `endpoint.sni` for endpoint-subpath policy
 6. `endpoint.header_name` for endpoint-subpath policy
 7. `endpoint.query_param_name` for endpoint-subpath policy
-8. `X-Client-Id`; if missing, authenticated consumer tag `upstream_env:<key>`; then JWT claim `client_id` from `Authorization` (then authenticated consumer fields as fallback)
+8. `X-Client-Id`; if missing, `client_id` from OIDC introspection response header (base64 JSON); then authenticated consumer tag `upstream_env:<key>`; then authenticated consumer fields as fallback
 
 When a selector value matches a key in `config.upstreams`,
 `kong.service.set_upstream(<mapped_upstream_name>)` is called.
@@ -54,10 +54,10 @@ plugins:
       query_param_name: epUpsByQP
 ```
 
-If you enable Kong `jwt` auth, keep consumer credentials and signed tokens aligned:
+If you enable Kong `openid-connect` introspection, keep the forwarded claim/header aligned with this plugin:
 
-- JWT `iss` must match the consumer JWT key.
-- JWT payload should include `client_id` claim (for this plugin to map).
+- OIDC should forward `client_id` using `upstream_headers_claims`.
+- OIDC should write that claim to the same header as `introspection_header_name` (default `X-Kong-Introspection-Response`).
 - Optional and recommended: set consumer tags in Kong as `upstream_env:<key>` to maintain environment mapping in consumer application configuration.
 
 ## Unit Tests
