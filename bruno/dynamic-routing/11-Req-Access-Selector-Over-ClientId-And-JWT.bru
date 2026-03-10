@@ -6,18 +6,18 @@ meta {
 
 docs {
   Access selector precedence should override X-Client-Id and OIDC introspection client_id values.
-  Expected backend: dev (from X-Client-Env).
+  Expected backend: dev (from X-Upstream-Env-AP).
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }
 
 headers {
   Accept: application/json
-  X-Client-Env: dev
+  X-Upstream-Env-AP: dev
   X-Client-Id: perf_client
   Authorization: Bearer {{jwt_neutral_client}}
   X-Introspection-Response: eyJjbGllbnRfaWQiOiJxYV9jbGllbnQiLCJhY3RpdmUiOnRydWV9

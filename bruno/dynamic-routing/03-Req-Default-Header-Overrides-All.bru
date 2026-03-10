@@ -5,22 +5,22 @@ meta {
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }
 
 params:query {
-  env: prod
-  resource_env: dev
+  apUpsByQP: prod
+  epUpsByQP: dev
 }
 
 headers {
   Accept: application/json
-  X-Upstream-Env: qa
-  X-Client-Env: qa
-  X-Resource-Env: prod
+  X-Upstream-Env-AP: qa
+  X-Upstream-Env-EP: prod
   Authorization: Bearer {{jwt_neutral_client}}
+  ~X-Upstream-Header: qa
 }
 
 tests {

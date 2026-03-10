@@ -14,24 +14,29 @@ This collection validates upstream selection precedence for the `dynamic-routing
 5. Consumer application mapping is maintained using consumer tag format:
    `upstream_env:<env>` (for example `upstream_env:it`).
 
-## Run Order And Expected Result
+## Test Suite Order (`01-Req` -> `14-Req`)
 
 | Order | Request File | Scenario | Expected Backend (`environment.ECHO_RESPONSE`) |
 |---|---|---|---|
 | 01 | `01-Req-Default-Route-No-Selectors.bru` | No selector values | `it` |
-| 02 | `02-Req-Default-Header-To-Dev.bru` | Default header `X-Upstream-Env=dev` | `dev` |
+| 02 | `02-Req-Default-Header-To-Dev.bru` | Default header `X-Upstream-Header=dev` | `dev` |
 | 03 | `03-Req-Default-Header-Overrides-All.bru` | Default header precedence over all selectors | `qa` |
-| 04 | `04-Req-Access-Header-Over-Query.bru` | Access header over access query | `qa` |
-| 05 | `05-Req-Access-Query-Over-Endpoint-Header.bru` | Access query over endpoint header | `dev` |
-| 06 | `06-Req-Endpoint-Header-Over-Query.bru` | Endpoint header over endpoint query | `qa` |
-| 07 | `07-Req-Endpoint-Query-To-Dev.bru` | Endpoint query fallback | `dev` |
-| 08 | `08-Req-Fallback-Invalid-Selectors-To-Endpoint-Query.bru` | Invalid higher selectors fall through to valid lower selector | `qa` |
+| 04 | `04-Req-Access-Header-Over-Query.bru` | Access-policy header over access-policy query | `qa` |
+| 05 | `05-Req-Access-Query-Over-Endpoint-Header.bru` | Access-policy query over endpoint-policy header | `dev` |
+| 06 | `06-Req-Endpoint-Header-Over-Query.bru` | Endpoint-policy header over endpoint-policy query | `qa` |
+| 07 | `07-Req-Endpoint-Query-To-Dev.bru` | Endpoint-policy query fallback | `dev` |
+| 08 | `08-Req-Fallback-Invalid-Selectors-To-Endpoint-Query.bru` | Invalid access/endpoint selectors fall through to valid endpoint-subpath query | `qa` |
 | 09 | `09-Req-JWT-ClientId-To-IT.bru` | OIDC introspection `client_id` routing | `it` |
 | 10 | `10-Req-ClientId-Header-To-Perf.bru` | Explicit `X-Client-Id` routing | `perf` |
 | 11 | `11-Req-Access-Selector-Over-ClientId-And-JWT.bru` | Selector precedence over OIDC `client_id` and `X-Client-Id` | `dev` |
 | 12 | `12-Req-Access-Policy-SNI-To-Dev.bru` | Access-policy SNI routing | `dev` |
 | 13 | `13-Req-Endpoint-Policy-SNI-To-QA.bru` | Endpoint-policy SNI routing | `qa` |
 | 14 | `14-Req-Consumer-Tag-Over-JWT-Claim.bru` | Consumer `upstream_env` fallback when no selector and no introspection header | `it` |
+
+## Route Shape Used In This Suite
+
+- Service context root: `/private/684130`
+- Endpoint path example: `/developer-platform/gateway/clients`
 
 ## Notes
 

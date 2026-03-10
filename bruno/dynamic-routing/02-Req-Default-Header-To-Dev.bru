@@ -5,14 +5,14 @@ meta {
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }
 
 headers {
   Accept: application/json
-  X-Upstream-Env: dev
+  X-Upstream-Header: dev
   Authorization: Bearer {{jwt_neutral_client}}
 }
 
@@ -28,6 +28,6 @@ tests {
 }
 
 docs {
-  Default selector header X-Upstream-Env should directly select dev.
+  Default selector header X-Upstream-Header should directly select dev.
   Expected backend: dev.
 }

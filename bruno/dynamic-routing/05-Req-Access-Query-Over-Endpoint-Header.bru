@@ -5,18 +5,18 @@ meta {
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients?apUpsByQP=qa
   body: none
   auth: none
 }
 
 params:query {
-  env: dev
+  apUpsByQP: qa
 }
 
 headers {
   Accept: application/json
-  X-Resource-Env: qa
+  X-Upstream-Env-EP: prod
   Authorization: Bearer {{jwt_neutral_client}}
 }
 
@@ -32,6 +32,6 @@ tests {
 }
 
 docs {
-  Access query env is evaluated before endpoint header X-Resource-Env.
+  Access-policy query env is evaluated before endpoint-policy header X-Upstream-Env-EP.
   Expected backend: dev.
 }

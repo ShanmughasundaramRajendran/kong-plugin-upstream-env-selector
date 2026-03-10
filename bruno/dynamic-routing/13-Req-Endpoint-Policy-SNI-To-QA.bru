@@ -5,13 +5,13 @@ meta {
 }
 
 docs {
-  Endpoint-policy SNI routing scenario for endpoint-specific route.
+  Endpoint-policy SNI routing scenario for endpoint route.
   Prerequisite: local DNS/hosts entry and TLS verification disabled in Bruno.
   Expected backend: qa.
 }
 
 get {
-  url: {{sni_endpoint_base_url}}/api/orders-endpoint-sni
+  url: {{sni_endpoint_base_url}}/private/684130/developer-platform/gateway/clients-endpoint-sni
   body: none
   auth: none
 }

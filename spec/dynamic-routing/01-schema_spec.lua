@@ -48,7 +48,7 @@ describe("dynamic-routing (schema)", function()
     assert.is_table(upstream_header_name)
     assert.is_table(client_id_header_name)
 
-    assert.equal("X-Upstream-Env", upstream_header_name.default)
+    assert.equal("X-Upstream-Header", upstream_header_name.default)
     assert.equal("X-Client-Id", client_id_header_name.default)
     assert.is_true(upstream_header_name.required)
     assert.is_true(client_id_header_name.required)

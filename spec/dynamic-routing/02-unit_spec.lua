@@ -59,27 +59,27 @@ describe("dynamic-routing (unit)", function()
         prod_client = "up-prod",
         ["sni.example.com"] = "up-qa",
       },
-      upstream_header_name = "X-Upstream-Env",
+      upstream_header_name = "X-Upstream-Header",
       client_id_header_name = "X-Client-Id",
       introspection_header_name = "X-Introspection-Response",
       access_policy = {
         sni = true,
-        header_name = "X-Client-Env",
-        query_param_name = "env",
+        header_name = "X-Upstream-Env-AP",
+        query_param_name = "apUpsByQP",
       },
       endpoint = {
         sni = true,
-        header_name = "X-Resource-Env",
-        query_param_name = "resource_env",
+        header_name = "X-Upstream-Env-EP",
+        query_param_name = "epUpsByQP",
       },
     }
   end)
 
-  it("priority #1: uses X-Upstream-Env header", function()
+  it("priority #1: uses X-Upstream-Header header", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Env" then return "dev" end
+        if name == "X-Upstream-Header" then return "dev" end
         return nil
       end,
       set_upstream = function(u) selected = u end,
@@ -94,7 +94,7 @@ describe("dynamic-routing (unit)", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Env" then return { "unknown", "qa" } end
+        if name == "X-Upstream-Header" then return { "unknown", "qa" } end
         return nil
       end,
       set_upstream = function(u) selected = u end,
@@ -104,7 +104,7 @@ describe("dynamic-routing (unit)", function()
     assert.equal("up-qa", selected)
   end)
 
-  it("priority #2: client SNI", function()
+  it("priority #2: access policy SNI", function()
     local selected
     local plugin = load_plugin({
       ngx = { var = { ssl_server_name = "sni.example.com" } },
@@ -113,14 +113,14 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("client_sni", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("access_policy_sni", kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("priority #3: client header", function()
+  it("priority #3: access policy header", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Client-Env" then return "prod" end
+        if name == "X-Upstream-Env-AP" then return "prod" end
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
@@ -128,14 +128,14 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-prod", selected)
-    assert.equal("client_header", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("access_policy_header", kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("priority #4: client query", function()
+  it("priority #4: access policy query", function()
     local selected
     local plugin = load_plugin({
       get_query_arg = function(name)
-        if name == "env" then return "qa" end
+        if name == "apUpsByQP" then return "qa" end
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
@@ -143,14 +143,14 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("client_query", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("access_policy_query", kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("client query supports table values and picks first match", function()
+  it("access policy query supports table values and picks first match", function()
     local selected
     local plugin = load_plugin({
       get_query_arg = function(name)
-        if name == "env" then return { "unknown", "qa" } end
+        if name == "apUpsByQP" then return { "unknown", "qa" } end
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
@@ -158,14 +158,14 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("client_query", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("access_policy_query", kong.ctx.shared.upstream_selector_reason)
   end)
 
   it("priority #6: resource header when access policy is disabled", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Resource-Env" then return "prod" end
+        if name == "X-Upstream-Env-EP" then return "prod" end
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
@@ -175,7 +175,7 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-prod", selected)
-    assert.equal("resource_header", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("endpoint_header", kong.ctx.shared.upstream_selector_reason)
   end)
 
   it("last priority: client id header", function()
@@ -320,7 +320,7 @@ describe("dynamic-routing (unit)", function()
     local set_upstream_calls = 0
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Env" then return "  DEV  " end
+        if name == "X-Upstream-Header" then return "  DEV  " end
       end,
       set_upstream = function()
         set_upstream_calls = set_upstream_calls + 1
@@ -336,7 +336,7 @@ describe("dynamic-routing (unit)", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Env" then return { "", "unknown", "qa" } end
+        if name == "X-Upstream-Header" then return { "", "unknown", "qa" } end
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
@@ -351,7 +351,7 @@ describe("dynamic-routing (unit)", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Resource-Env" then return { "unknown", "prod" } end
+        if name == "X-Upstream-Env-EP" then return { "unknown", "prod" } end
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
@@ -361,14 +361,14 @@ describe("dynamic-routing (unit)", function()
     plugin:access(cfg)
 
     assert.equal("up-prod", selected)
-    assert.equal("resource_header", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("endpoint_header", kong.ctx.shared.upstream_selector_reason)
   end)
 
   it("endpoint query supports table values and picks first valid match", function()
     local selected
     local plugin = load_plugin({
       get_query_arg = function(name)
-        if name == "resource_env" then return { "unknown", "qa" } end
+        if name == "epUpsByQP" then return { "unknown", "qa" } end
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
@@ -376,12 +376,72 @@ describe("dynamic-routing (unit)", function()
 
     cfg.access_policy = {}
     cfg.endpoint = {
-      query_param_name = "resource_env",
+      query_param_name = "epUpsByQP",
     }
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("resource_query", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("endpoint_query", kong.ctx.shared.upstream_selector_reason)
+  end)
+
+  it("keeps access policy precedence above endpoint policy", function()
+    local selected
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "X-Upstream-Env-AP" then return "prod" end
+        if name == "X-Upstream-Env-EP" then return "qa" end
+      end,
+      get_query_arg = function(name)
+        if name == "apUpsByQP" then return "dev" end
+        if name == "epUpsByQP" then return "qa" end
+      end,
+      ngx = { var = { ssl_server_name = "sni.example.com" } },
+      set_upstream = function(u) selected = u end,
+    })
+
+    plugin:access(cfg)
+
+    assert.equal("up-qa", selected)
+    assert.equal("access_policy_sni", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("sni.example.com", kong.ctx.shared.upstream_selector_key)
+  end)
+
+  it("falls through invalid access policy selectors to endpoint policy selectors", function()
+    local selected
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "X-Upstream-Env-AP" then return "unknown" end
+        if name == "X-Upstream-Env-EP" then return "prod" end
+      end,
+      get_query_arg = function(name)
+        if name == "apUpsByQP" then return "unknown" end
+      end,
+      ngx = { var = {} },
+      set_upstream = function(u) selected = u end,
+    })
+
+    plugin:access(cfg)
+
+    assert.equal("up-prod", selected)
+    assert.equal("endpoint_header", kong.ctx.shared.upstream_selector_reason)
+  end)
+
+  it("supports endpoint policy sni when access policy sni is disabled", function()
+    local selected
+    cfg.upstreams["endpoint.example.com"] = "up-prod"
+    local plugin = load_plugin({
+      ngx = { var = { ssl_server_name = "endpoint.example.com" } },
+      set_upstream = function(u) selected = u end,
+    })
+
+    cfg.access_policy.sni = false
+    cfg.endpoint.sni = true
+
+    plugin:access(cfg)
+
+    assert.equal("up-prod", selected)
+    assert.equal("endpoint_sni", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("endpoint.example.com", kong.ctx.shared.upstream_selector_key)
   end)
 
   it("introspection header table uses first value for client_id extraction", function()

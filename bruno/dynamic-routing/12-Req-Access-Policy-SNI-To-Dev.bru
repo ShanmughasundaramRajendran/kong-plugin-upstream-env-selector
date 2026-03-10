@@ -5,13 +5,13 @@ meta {
 }
 
 docs {
-  Access-policy SNI routing scenario.
+  Access-policy SNI routing scenario for service-context-root matching.
   Prerequisite: local DNS/hosts entry and TLS verification disabled in Bruno.
   Expected backend: dev.
 }
 
 get {
-  url: {{sni_access_base_url}}/api/orders
+  url: {{sni_access_base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }

@@ -5,20 +5,20 @@ meta {
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }
 
 params:query {
-  env: unknown
-  resource_env: qa
+  apUpsByQP: unknown
+  epUpsByQP: qa
 }
 
 headers {
   Accept: application/json
-  X-Client-Env: unknown
-  X-Resource-Env: unknown
+  X-Upstream-Env-AP: unknown
+  X-Upstream-Env-EP: unknown
   Authorization: Bearer {{jwt_neutral_client}}
 }
 
@@ -34,6 +34,6 @@ tests {
 }
 
 docs {
-  Invalid high-priority selectors should fall through to a valid lower selector.
-  Expected backend: qa via resource_env query.
+  Invalid service-context-root and endpoint-subpath selectors should fall through to a valid lower-priority endpoint-subpath selector.
+  Expected backend: qa via epUpsByQP query.
 }

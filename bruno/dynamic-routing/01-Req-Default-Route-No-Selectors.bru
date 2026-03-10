@@ -4,13 +4,8 @@ meta {
   seq: 1
 }
 
-docs {
-  Verify base behavior when no selector headers/query are provided.
-  Expected backend: it (service default upstream).
-}
-
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }
@@ -24,9 +19,14 @@ tests {
   test("status is 200", function() {
     expect(res.getStatus()).to.equal(200);
   });
-
+  
   test("routes to it", function() {
     const body = JSON.parse(res.getBody());
     expect(body.environment.ECHO_RESPONSE).to.equal("it");
   });
+}
+
+docs {
+  Verify base behavior when no selector headers/query are provided.
+  Expected backend: it (service default upstream).
 }

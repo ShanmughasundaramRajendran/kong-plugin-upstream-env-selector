@@ -9,19 +9,21 @@ Repository-level setup and commands:
 
 The plugin evaluates selectors in this order:
 
-1. `X-Upstream-Env`
-2. `access_policy.sni`
-3. `access_policy.header_name`
-4. `access_policy.query_param_name`
-5. `endpoint.sni`
-6. `endpoint.header_name`
-7. `endpoint.query_param_name`
+1. `X-Upstream-Header`
+2. `access_policy.sni` for service-context-root access policy
+3. `access_policy.header_name` for service-context-root access policy
+4. `access_policy.query_param_name` for service-context-root access policy
+5. `endpoint.sni` for endpoint-subpath policy
+6. `endpoint.header_name` for endpoint-subpath policy
+7. `endpoint.query_param_name` for endpoint-subpath policy
 8. `X-Client-Id`; if missing, authenticated consumer tag `upstream_env:<key>`; then JWT claim `client_id` from `Authorization` (then authenticated consumer fields as fallback)
 
 When a selector value matches a key in `config.upstreams`,
 `kong.service.set_upstream(<mapped_upstream_name>)` is called.
 
 If nothing matches, the plugin does not block. Kong uses service default routing.
+
+`access_policy` is intended for the service context root portion of the request path. `endpoint` is intended for the remaining endpoint/resource subpath. Their selector priority order stays unchanged: access-policy selectors are still evaluated before endpoint-policy selectors.
 
 ## Config Shape
 
@@ -30,7 +32,7 @@ plugins:
 - name: dynamic-routing
   service: my-service
   config:
-    upstream_header_name: X-Upstream-Env
+    upstream_header_name: X-Upstream-Header
     client_id_header_name: X-Client-Id
 
     upstreams:
@@ -43,13 +45,13 @@ plugins:
 
     access_policy:
       sni: true
-      header_name: X-Client-Env
-      query_param_name: env
+      header_name: X-Upstream-Env-AP
+      query_param_name: apUpsByQP
 
     endpoint:
       sni: false
-      header_name: X-Resource-Env
-      query_param_name: resource_env
+      header_name: X-Upstream-Env-EP
+      query_param_name: epUpsByQP
 ```
 
 If you enable Kong `jwt` auth, keep consumer credentials and signed tokens aligned:

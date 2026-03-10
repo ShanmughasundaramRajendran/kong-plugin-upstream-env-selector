@@ -18,7 +18,7 @@ local _M = {
 local BY_SNI = "sni"
 local BY_HEADER = "header_name"
 local BY_QPARAM_NAME = "query_param_name"
-local DEFAULT_UPSTREAM_HEADER_NAME = "X-Upstream-Env"
+local DEFAULT_UPSTREAM_HEADER_NAME = "X-Upstream-Header"
 local DEFAULT_CLIENT_ID_HEADER_NAME = "X-Client-Id"
 local DEFAULT_INTROSPECTION_HEADER_NAME = "X-Kong-Introspection-Response"
 local UPSTREAM_ENV_TAG_PREFIX = "upstream_env:"
@@ -181,6 +181,30 @@ local function get_upstream_by_query_param(name, upstreams)
   return get_upstream_by_names(names, upstreams)
 end
 
+local function resolve_policy_upstream(policy, upstreams, policy_name)
+  policy = policy or {}
+
+  local upstream, key = get_upstream_by_sni(policy[BY_SNI], upstreams)
+  if upstream then
+    kong.log.debug("dynamic-routing: upstream env by ", policy_name, " sni: ", upstream)
+    return upstream, key, policy_name .. "_sni"
+  end
+
+  upstream, key = get_upstream_by_header(policy[BY_HEADER], upstreams)
+  if upstream then
+    kong.log.debug("dynamic-routing: upstream env by ", policy_name, " header: ", upstream)
+    return upstream, key, policy_name .. "_header"
+  end
+
+  upstream, key = get_upstream_by_query_param(policy[BY_QPARAM_NAME], upstreams)
+  if upstream then
+    kong.log.debug("dynamic-routing: upstream env by ", policy_name, " query param: ", upstream)
+    return upstream, key, policy_name .. "_query"
+  end
+
+  return nil
+end
+
 local function set_upstream(upstream_name, reason, selector_key)
   kong.service.set_upstream(upstream_name)
   kong.ctx.shared.upstream_backend_id = upstream_name
@@ -249,8 +273,8 @@ function _M:access(cfg)
   -- ACCESS PHASE:
   -- Determine upstream using strict priority:
   -- 1) default header
-  -- 2) access policy (sni -> header -> query)
-  -- 3) endpoint policy (sni -> header -> query)
+  -- 2) access policy / service-context-root selectors (sni -> header -> query)
+  -- 3) endpoint policy / endpoint-subpath selectors (sni -> header -> query)
   -- 4) client_id chain (X-Client-Id -> OIDC introspection claim -> consumer)
   if type(cfg) ~= "table" then
     kong.log.debug("dynamic-routing: No config loaded")
@@ -265,7 +289,7 @@ function _M:access(cfg)
 
   local default_header_name = cfg.upstream_header_name or DEFAULT_UPSTREAM_HEADER_NAME
 
-  local upstream, key = get_upstream_by_default_header(default_header_name, upstreams)
+  local upstream, key, reason = get_upstream_by_default_header(default_header_name, upstreams)
   if upstream then
     kong.log.debug("dynamic-routing: upstream found using default header: ", upstream)
     set_upstream(upstream, "default_header", key)
@@ -274,48 +298,15 @@ function _M:access(cfg)
 
   local err = validate_inputs(cfg)
   if not err then
-    local policy = cfg.access_policy or {}
-    local endpoint = cfg.endpoint or {}
-
-    upstream, key = get_upstream_by_sni(policy[BY_SNI], upstreams)
+    upstream, key, reason = resolve_policy_upstream(cfg.access_policy, upstreams, "access_policy")
     if upstream then
-      kong.log.debug("dynamic-routing: upstream env by client sni: ", upstream)
-      set_upstream(upstream, "client_sni", key)
+      set_upstream(upstream, reason, key)
       return
     end
 
-    upstream, key = get_upstream_by_header(policy[BY_HEADER], upstreams)
+    upstream, key, reason = resolve_policy_upstream(cfg.endpoint, upstreams, "endpoint")
     if upstream then
-      kong.log.debug("dynamic-routing: upstream env by client header: ", upstream)
-      set_upstream(upstream, "client_header", key)
-      return
-    end
-
-    upstream, key = get_upstream_by_query_param(policy[BY_QPARAM_NAME], upstreams)
-    if upstream then
-      kong.log.debug("dynamic-routing: upstream env by client query param: ", upstream)
-      set_upstream(upstream, "client_query", key)
-      return
-    end
-
-    upstream, key = get_upstream_by_sni(endpoint[BY_SNI], upstreams)
-    if upstream then
-      kong.log.debug("dynamic-routing: upstream env by resource sni: ", upstream)
-      set_upstream(upstream, "resource_sni", key)
-      return
-    end
-
-    upstream, key = get_upstream_by_header(endpoint[BY_HEADER], upstreams)
-    if upstream then
-      kong.log.debug("dynamic-routing: upstream env by resource header: ", upstream)
-      set_upstream(upstream, "resource_header", key)
-      return
-    end
-
-    upstream, key = get_upstream_by_query_param(endpoint[BY_QPARAM_NAME], upstreams)
-    if upstream then
-      kong.log.debug("dynamic-routing: upstream env by resource query param: ", upstream)
-      set_upstream(upstream, "resource_query", key)
+      set_upstream(upstream, reason, key)
       return
     end
   end

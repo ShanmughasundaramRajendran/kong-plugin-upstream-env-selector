@@ -174,7 +174,7 @@ describe("dynamic-routing (integration)", function()
       name = "dynamic-routing",
       service = { name = "orders-gateway-service-int-" .. suffix },
       config = {
-        upstream_header_name = "X-Upstream-Env",
+        upstream_header_name = "X-Upstream-Header",
         client_id_header_name = "X-Client-Id",
         introspection_header_name = "X-Introspection-Response",
         upstreams = {
@@ -189,13 +189,13 @@ describe("dynamic-routing (integration)", function()
         },
         access_policy = {
           sni = false,
-          header_name = "X-Client-Env",
-          query_param_name = "env",
+          header_name = "X-Upstream-Env-AP",
+          query_param_name = "apUpsByQP",
         },
         endpoint = {
           sni = false,
-          header_name = "X-Resource-Env",
-          query_param_name = "resource_env",
+          header_name = "X-Upstream-Env-EP",
+          query_param_name = "epUpsByQP",
         },
       },
     })
@@ -221,62 +221,81 @@ describe("dynamic-routing (integration)", function()
     request_and_assert("it")
   end)
 
-  it("selects by default X-Upstream-Env header", function()
+  it("selects by default X-Upstream-Header header", function()
     request_and_assert("dev", {
-      headers = { ["X-Upstream-Env"] = "dev" },
+      headers = { ["X-Upstream-Header"] = "dev" },
     })
   end)
 
   it("prioritizes default header over access and endpoint selectors", function()
     request_and_assert("qa", {
       headers = {
-        ["X-Upstream-Env"] = "qa",
-        ["X-Client-Env"] = "dev",
-        ["X-Resource-Env"] = "prod",
+        ["X-Upstream-Header"] = "qa",
+        ["X-Upstream-Env-AP"] = "dev",
+        ["X-Upstream-Env-EP"] = "prod",
       },
       query = {
-        env = "prod",
-        resource_env = "dev",
+        apUpsByQP = "prod",
+        epUpsByQP = "dev",
       },
     })
   end)
 
   it("uses access policy header before access query", function()
     request_and_assert("qa", {
-      headers = { ["X-Client-Env"] = "qa" },
-      query = { env = "dev" },
+      headers = { ["X-Upstream-Env-AP"] = "qa" },
+      query = { apUpsByQP = "dev" },
     })
   end)
 
   it("uses access query before endpoint header", function()
     request_and_assert("dev", {
-      headers = { ["X-Resource-Env"] = "qa" },
-      query = { env = "dev" },
+      headers = { ["X-Upstream-Env-EP"] = "qa" },
+      query = { apUpsByQP = "dev" },
+    })
+  end)
+
+  it("uses access policy header before endpoint query", function()
+    request_and_assert("qa", {
+      headers = { ["X-Upstream-Env-AP"] = "qa" },
+      query = { epUpsByQP = "dev" },
     })
   end)
 
   it("uses endpoint header before endpoint query", function()
     request_and_assert("qa", {
-      headers = { ["X-Resource-Env"] = "qa" },
-      query = { resource_env = "dev" },
+      headers = { ["X-Upstream-Env-EP"] = "qa" },
+      query = { epUpsByQP = "dev" },
     })
   end)
 
   it("uses endpoint query when higher selectors are absent", function()
     request_and_assert("dev", {
-      query = { resource_env = "dev" },
+      query = { epUpsByQP = "dev" },
     })
   end)
 
   it("falls through invalid higher selectors to valid endpoint query", function()
     request_and_assert("qa", {
       headers = {
-        ["X-Client-Env"] = "unknown",
-        ["X-Resource-Env"] = "unknown",
+        ["X-Upstream-Env-AP"] = "unknown",
+        ["X-Upstream-Env-EP"] = "unknown",
       },
       query = {
-        env = "unknown",
-        resource_env = "qa",
+        apUpsByQP = "unknown",
+        epUpsByQP = "qa",
+      },
+    })
+  end)
+
+  it("falls through invalid access policy selectors to valid endpoint header", function()
+    request_and_assert("prod", {
+      headers = {
+        ["X-Upstream-Env-AP"] = "unknown",
+        ["X-Upstream-Env-EP"] = "prod",
+      },
+      query = {
+        apUpsByQP = "unknown",
       },
     })
   end)
@@ -311,7 +330,7 @@ describe("dynamic-routing (integration)", function()
   it("keeps access selector priority above OIDC client_id and X-Client-Id", function()
     request_and_assert("dev", {
       headers = {
-        ["X-Client-Env"] = "dev",
+        ["X-Upstream-Env-AP"] = "dev",
         ["X-Client-Id"] = "perf_client",
         ["Authorization"] = "Bearer " .. jwt_for_client_id("qa_client"),
       },

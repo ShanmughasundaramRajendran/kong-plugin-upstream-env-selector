@@ -5,19 +5,19 @@ meta {
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients?apUpsByQP=dev
   body: none
   auth: none
 }
 
 params:query {
-  env: dev
+  apUpsByQP: dev
 }
 
 headers {
   Accept: application/json
-  X-Client-Env: qa
   Authorization: Bearer {{jwt_neutral_client}}
+  ~X-Upstream-Env-AP: qa
 }
 
 tests {
@@ -32,6 +32,6 @@ tests {
 }
 
 docs {
-  Access header (X-Client-Env) should win over access query param env.
+  Access-policy header (X-Upstream-Env-AP) should win over access-policy query param apUpsByQP.
   Expected backend: qa.
 }

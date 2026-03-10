@@ -7,7 +7,7 @@ SHELL := /usr/bin/env bash
 PONGO ?= pongo
 PONGO_KONG_IMAGE ?= kong/kong-gateway:latest
 BASE_URL ?= http://localhost:8000
-ROUTE_PATH ?= /api/orders
+ROUTE_PATH ?= /private/684130/developer-platform/gateway/clients
 
 help:
 	@echo "Targets:"
@@ -28,7 +28,7 @@ help:
 	@echo "Environment overrides:"
 	@echo "  PONGO_KONG_IMAGE=kong/kong-gateway:latest"
 	@echo "  BASE_URL=http://localhost:8000"
-	@echo "  ROUTE_PATH=/api/orders"
+	@echo "  ROUTE_PATH=/private/684130/developer-platform/gateway/clients"
 	@echo ""
 
 npm-install:

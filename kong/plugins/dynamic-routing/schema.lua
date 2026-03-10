@@ -20,7 +20,7 @@ return {
             }
           },
           -- Highest-priority request header.
-          { upstream_header_name = { type = "string", required = true, default = "X-Upstream-Env" } },
+          { upstream_header_name = { type = "string", required = true, default = "X-Upstream-Header" } },
           -- Access policy selectors (evaluated before endpoint selectors).
           { access_policy = {
               type = "record",

@@ -7,17 +7,16 @@ services:
   port: 80
   protocol: http
   routes:
-  - name: orders-api-route
+  - name: orders-api-main-route
+    methods:
+    - GET
     paths:
-    - /api/orders
-- name: orders-gateway-endpoint-sni-service
-  host: orders-api-it-upstream
-  port: 80
-  protocol: http
-  routes:
+    - /private/684130/developer-platform/gateway/clients
   - name: orders-api-endpoint-sni-route
+    methods:
+    - GET
     paths:
-    - /api/orders-endpoint-sni
+    - /private/684130/developer-platform/gateway/clients-endpoint-sni
 
 upstreams:
 - name: orders-api-dev-upstream
@@ -37,64 +36,10 @@ upstreams:
   - target: orders_api_perf:8080
 
 plugins:
-- name: openid-connect
-  service: orders-gateway-service
-  enabled: false
-  tags:
-  - placeholder
-  - oidc
-  config:
-    # Local Keycloak config for testing from inside Kong container.
-    # Docker Desktop resolves host Keycloak via host.docker.internal.
-    # Switch `enabled` to true when you want Kong to enforce OIDC.
-    auth_methods:
-    - introspection
-    bearer_token_param_type:
-    - header
-    bearer_token_type:
-    - bearer
-    issuer: http://host.docker.internal:8085/realms/kong-local
-    client_id:
-    - kong-introspector
-    client_secret:
-    - kong-introspector-secret
-    introspection_endpoint: http://host.docker.internal:8085/realms/kong-local/protocol/openid-connect/token/introspect
-    # Dynamic-routing reads client_id from this header (base64 JSON introspection response).
-    # Set this to the same header your OIDC plugin instance forwards upstream.
-    upstream_headers_claims:
-    - client_id
-    upstream_headers_names:
-    - X-Introspection-Response
-- name: openid-connect
-  service: orders-gateway-endpoint-sni-service
-  enabled: false
-  tags:
-  - placeholder
-  - oidc
-  config:
-    # Local Keycloak config for testing from inside Kong container.
-    # Docker Desktop resolves host Keycloak via host.docker.internal.
-    # Switch `enabled` to true when you want Kong to enforce OIDC.
-    auth_methods:
-    - introspection
-    bearer_token_param_type:
-    - header
-    bearer_token_type:
-    - bearer
-    issuer: http://host.docker.internal:8085/realms/kong-local
-    client_id:
-    - kong-introspector
-    client_secret:
-    - kong-introspector-secret
-    introspection_endpoint: http://host.docker.internal:8085/realms/kong-local/protocol/openid-connect/token/introspect
-    upstream_headers_claims:
-    - client_id
-    upstream_headers_names:
-    - X-Introspection-Response
 - name: dynamic-routing
   service: orders-gateway-service
   config:
-    upstream_header_name: X-Upstream-Env
+    upstream_header_name: X-Upstream-Header
     client_id_header_name: X-Client-Id
     introspection_header_name: X-Introspection-Response
     upstreams:
@@ -111,38 +56,12 @@ plugins:
       endpoint-sni-qa.local: orders-api-qa-upstream
     access_policy:
       sni: true
-      header_name: X-Client-Env
-      query_param_name: env
-    endpoint:
-      sni: false
-      header_name: X-Resource-Env
-      query_param_name: resource_env
-- name: dynamic-routing
-  service: orders-gateway-endpoint-sni-service
-  config:
-    upstream_header_name: X-Upstream-Env
-    client_id_header_name: X-Client-Id
-    introspection_header_name: X-Introspection-Response
-    upstreams:
-      dev: orders-api-dev-upstream
-      prod: orders-api-prod-upstream
-      qa: orders-api-qa-upstream
-      it: orders-api-it-upstream
-      dev_client: orders-api-dev-upstream
-      prod_client: orders-api-prod-upstream
-      qa_client: orders-api-qa-upstream
-      it_client: orders-api-it-upstream
-      perf_client: orders-api-perf-upstream
-      access-sni-dev.local: orders-api-dev-upstream
-      endpoint-sni-qa.local: orders-api-qa-upstream
-    access_policy:
-      sni: false
-      header_name: X-Client-Env
-      query_param_name: env
+      header_name: X-Upstream-Env-AP
+      query_param_name: apUpsByQP
     endpoint:
       sni: true
-      header_name: X-Resource-Env
-      query_param_name: resource_env
+      header_name: X-Upstream-Env-EP
+      query_param_name: epUpsByQP
 
 consumers:
 - username: dev-client-app

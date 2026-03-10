@@ -5,13 +5,13 @@ meta {
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }
 
 params:query {
-  resource_env: dev
+  epUpsByQP: dev
 }
 
 headers {
@@ -31,6 +31,6 @@ tests {
 }
 
 docs {
-  Endpoint query resource_env is used when higher selectors are absent.
+  Endpoint-policy query epUpsByQP is used when higher selectors are absent.
   Expected backend: dev.
 }

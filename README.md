@@ -9,13 +9,13 @@ Plugin-level docs:
 
 The plugin checks selectors in this order and picks the first matching upstream key:
 
-1. `X-Upstream-Env`
-2. `access_policy.sni`
-3. `access_policy.header_name`
-4. `access_policy.query_param_name`
-5. `endpoint.sni`
-6. `endpoint.header_name`
-7. `endpoint.query_param_name`
+1. `X-Upstream-Header`
+2. `access_policy.sni` for service-context-root access policy
+3. `access_policy.header_name` for service-context-root access policy
+4. `access_policy.query_param_name` for service-context-root access policy
+5. `endpoint.sni` for endpoint-subpath policy
+6. `endpoint.header_name` for endpoint-subpath policy
+7. `endpoint.query_param_name` for endpoint-subpath policy
 8. `X-Client-Id` header; if absent, plugin extracts `client_id` from OIDC introspection response header (then authenticated consumer tag/id fallback)
 
 If nothing matches, it does not block the request; Kong keeps default routing.
@@ -120,7 +120,7 @@ make test-all
 - `bruno/dynamic-routing/bruno.json`
 - `bruno/dynamic-routing/environments/local.bru`
 - customer run guide: [bruno/dynamic-routing/README.md](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/bruno/dynamic-routing/README.md)
-- requests `01..13` (`01-Req-...` naming):
+- requests `01..14` (`01-Req-...` naming):
 - default route behavior with no selectors
 - default header routing and default-header-overrides-all precedence
 - access policy header/query precedence
@@ -129,7 +129,8 @@ make test-all
 - OIDC introspection `client_id` routing and explicit `X-Client-Id` routing
 - selector precedence over OIDC-derived `client_id`/`X-Client-Id`
 - access-policy SNI routing
-- endpoint-policy SNI routing (route `/api/orders-endpoint-sni`)
+- endpoint-policy SNI routing (route `/private/684130/developer-platform/gateway/clients-endpoint-sni`)
+- local declarative config uses one service with multiple `GET` routes (main path + endpoint-SNI path)
 
 SNI Bruno setup:
 
@@ -160,5 +161,5 @@ Kong consumer apps declared in `config/kong.yml`:
 ## Useful Overrides
 
 - `BASE_URL` (default `http://localhost:8000`)
-- `ROUTE_PATH` (default `/api/orders`)
+- `ROUTE_PATH` (default `/private/684130/developer-platform/gateway/clients`)
 - `PONGO_KONG_IMAGE` (default `kong/kong-gateway:latest`)

@@ -6,8 +6,8 @@ const crypto = require("crypto");
 // Functional suite validates ACCESS phase selector precedence against the local Kong stack.
 // `rewrite` and `log` phases are intentionally not implemented in this plugin.
 const BASE_URL = process.env.BASE_URL || "http://localhost:8000";
-const ROUTE_PATH = process.env.ROUTE_PATH || "/api/orders";
-const ENDPOINT_SNI_ROUTE_PATH = process.env.ENDPOINT_SNI_ROUTE_PATH || "/api/orders-endpoint-sni";
+const ROUTE_PATH = process.env.ROUTE_PATH || "/private/684130/developer-platform/gateway/clients";
+const ENDPOINT_SNI_ROUTE_PATH = process.env.ENDPOINT_SNI_ROUTE_PATH || "/private/684130/developer-platform/gateway/clients-endpoint-sni";
 const ACCESS_SNI_BASE_URL = process.env.ACCESS_SNI_BASE_URL || "https://access-sni-dev.local:8443";
 const ENDPOINT_SNI_BASE_URL = process.env.ENDPOINT_SNI_BASE_URL || "https://endpoint-sni-qa.local:8443";
 const RUN_SNI_TESTS = process.env.RUN_SNI_TESTS === "true";
@@ -73,15 +73,15 @@ function assertOkAndBackend(response, body, expected) {
 describe("dynamic-routing functional suite (image-aligned precedence)", function () {
   this.timeout(120000);
 
-  it("should select primary upstream when no custom selectors and no X-Upstream-Env header", async function () {
+  it("should select primary upstream when no custom selectors and no X-Upstream-Header header", async function () {
     const { response, body } = await getRoute(ROUTE_PATH);
     assertOkAndBackend(response, body, "it");
   });
 
-  it("should select upstream based on default X-Upstream-Env header", async function () {
+  it("should select upstream based on default X-Upstream-Header header", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Upstream-Env": "dev",
+        "X-Upstream-Header": "dev",
       },
     });
     assertOkAndBackend(response, body, "dev");
@@ -90,13 +90,13 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
   it("should select default header over access and endpoint selectors", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Upstream-Env": "qa",
-        "X-Client-Env": "dev",
-        "X-Resource-Env": "prod",
+        "X-Upstream-Header": "qa",
+        "X-Upstream-Env-AP": "dev",
+        "X-Upstream-Env-EP": "prod",
       },
       query: {
-        env: "prod",
-        resource_env: "dev",
+        apUpsByQP: "prod",
+        epUpsByQP: "dev",
       },
     });
     assertOkAndBackend(response, body, "qa");
@@ -105,10 +105,10 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
   it("should select upstream by access policy header over query", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Client-Env": "qa",
+        "X-Upstream-Env-AP": "qa",
       },
       query: {
-        env: "dev",
+        apUpsByQP: "dev",
       },
     });
     assertOkAndBackend(response, body, "qa");
@@ -117,10 +117,10 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
   it("should select upstream by access policy query over endpoint policy header", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Resource-Env": "qa",
+        "X-Upstream-Env-EP": "qa",
       },
       query: {
-        env: "dev",
+        apUpsByQP: "dev",
       },
     });
     assertOkAndBackend(response, body, "dev");
@@ -129,10 +129,10 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
   it("should select upstream by endpoint policy header over endpoint policy query", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Resource-Env": "qa",
+        "X-Upstream-Env-EP": "qa",
       },
       query: {
-        resource_env: "dev",
+        epUpsByQP: "dev",
       },
     });
     assertOkAndBackend(response, body, "qa");
@@ -141,7 +141,7 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
   it("should select upstream by endpoint policy query when higher selectors are absent", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       query: {
-        resource_env: "dev",
+        epUpsByQP: "dev",
       },
     });
     assertOkAndBackend(response, body, "dev");
@@ -150,12 +150,12 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
   it("should fall back from invalid higher selectors to valid endpoint query", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Client-Env": "unknown",
-        "X-Resource-Env": "unknown",
+        "X-Upstream-Env-AP": "unknown",
+        "X-Upstream-Env-EP": "unknown",
       },
       query: {
-        env: "unknown",
-        resource_env: "qa",
+        apUpsByQP: "unknown",
+        epUpsByQP: "qa",
       },
     });
     assertOkAndBackend(response, body, "qa");
@@ -198,7 +198,7 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
   it("should keep OIDC client_id/X-Client-Id as lower priority than selectors", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Client-Env": "dev",
+        "X-Upstream-Env-AP": "dev",
         "X-Client-Id": "perf_client",
         Authorization: `Bearer ${createJwtWithClientId("qa_client")}`,
       },

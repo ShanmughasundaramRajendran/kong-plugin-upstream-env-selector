@@ -5,18 +5,18 @@ meta {
 }
 
 get {
-  url: {{base_url}}/api/orders
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }
 
 params:query {
-  resource_env: dev
+  epUpsByQP: dev
 }
 
 headers {
   Accept: application/json
-  X-Resource-Env: qa
+  X-Upstream-Env-EP: qa
   Authorization: Bearer {{jwt_neutral_client}}
 }
 
@@ -32,6 +32,6 @@ tests {
 }
 
 docs {
-  Endpoint header X-Resource-Env should win over endpoint query resource_env.
+  Endpoint-policy header X-Upstream-Env-EP should win over endpoint-policy query epUpsByQP.
   Expected backend: qa.
 }
