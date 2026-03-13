@@ -6,6 +6,8 @@ return {
   -- - name: dynamic-routing
   name = "dynamic-routing",
   fields = {
+    -- Scope: can be applied globally, per-service, or per-route.
+    -- It is intentionally not valid as a consumer-scoped plugin.
     { consumer = typedefs.no_consumer },
     { protocols = typedefs.protocols_http },
     { config = {
@@ -15,20 +17,24 @@ return {
           { upstreams = {
               type = "map",
               required = true,
+              len_min = 1,
               keys = { type = "string" },
               values = { type = "string" },
             }
           },
           -- Highest-priority request header.
-          { upstream_header_name = { type = "string", required = true, default = "X-Upstream-Header" } },
+          { upstream_header_name = { type = "string", required = true, default = "X-Upstream-Env" } },
           -- Access policy selectors (evaluated before endpoint selectors).
           { access_policy = {
               type = "record",
               required = false,
               fields = {
                 { sni = { type = "boolean", required = false, default = false } },
-                { header_name = { type = "string", required = false } },
-                { query_param_name = { type = "string", required = false } },
+                { header_name = { type = "string", required = false, len_min = 1 } },
+                { query_param_name = { type = "string", required = false, len_min = 1 } },
+              },
+              entity_checks = {
+                { at_least_one_of = { "sni", "header_name", "query_param_name" } },
               },
             }
           },
@@ -38,12 +44,15 @@ return {
               required = false,
               fields = {
                 { sni = { type = "boolean", required = false, default = false } },
-                { header_name = { type = "string", required = false } },
-                { query_param_name = { type = "string", required = false } },
+                { header_name = { type = "string", required = false, len_min = 1 } },
+                { query_param_name = { type = "string", required = false, len_min = 1 } },
+              },
+              entity_checks = {
+                { at_least_one_of = { "sni", "header_name", "query_param_name" } },
               },
             }
           },
-          -- Final fallback selector source before consumer fallback.
+          -- Header name used when forwarding resolved client_id upstream.
           { client_id_header_name = {
               type = "string",
               required = true,

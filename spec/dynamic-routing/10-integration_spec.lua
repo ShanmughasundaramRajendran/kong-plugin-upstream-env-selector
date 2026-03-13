@@ -106,18 +106,6 @@ describe("dynamic-routing (integration)", function()
     assert(t:join())
   end
 
-  local function jwt_for_client_id(client_id)
-    if client_id == "qa_client" then
-      return "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ."
-    end
-
-    if client_id == "it_client" then
-      return "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJjbGllbnRfaWQiOiJpdF9jbGllbnQifQ."
-    end
-
-    return nil
-  end
-
   lazy_setup(function()
     helpers.get_db_utils(nil, {
       "routes",
@@ -174,7 +162,7 @@ describe("dynamic-routing (integration)", function()
       name = "dynamic-routing",
       service = { name = "orders-gateway-service-int-" .. suffix },
       config = {
-        upstream_header_name = "X-Upstream-Header",
+        upstream_header_name = "X-Upstream-Env",
         client_id_header_name = "X-Client-Id",
         introspection_header_name = "X-Introspection-Response",
         upstreams = {
@@ -221,16 +209,16 @@ describe("dynamic-routing (integration)", function()
     request_and_assert("it")
   end)
 
-  it("selects by default X-Upstream-Header header", function()
+  it("selects by default X-Upstream-Env header", function()
     request_and_assert("dev", {
-      headers = { ["X-Upstream-Header"] = "dev" },
+      headers = { ["X-Upstream-Env"] = "dev" },
     })
   end)
 
   it("prioritizes default header over access and endpoint selectors", function()
     request_and_assert("qa", {
       headers = {
-        ["X-Upstream-Header"] = "qa",
+        ["X-Upstream-Env"] = "qa",
         ["X-Upstream-Env-AP"] = "dev",
         ["X-Upstream-Env-EP"] = "prod",
       },
@@ -300,39 +288,36 @@ describe("dynamic-routing (integration)", function()
     })
   end)
 
-  it("keeps default upstream when only bearer token is present without introspection header", function()
+  it("keeps default upstream when only bearer token is present", function()
     request_and_assert("it", {
       headers = {
-        ["Authorization"] = "Bearer " .. jwt_for_client_id("it_client"),
+        ["Authorization"] = "Bearer token",
       },
     })
   end)
 
-  it("routes by OIDC introspection header client_id when selectors are absent", function()
-    request_and_assert("perf", {
+  it("does not route by introspection header client_id when selectors are absent", function()
+    request_and_assert("it", {
       headers = {
-        ["Authorization"] = "Bearer " .. jwt_for_client_id("qa_client"),
+        ["Authorization"] = "Bearer token",
         ["X-Introspection-Response"] = "eyJjbGllbnRfaWQiOiJwZXJmX2NsaWVudCJ9",
       },
-      expected_received_client_id = "perf_client",
     })
   end)
 
-  it("routes by explicit X-Client-Id when selector levels do not match", function()
-    request_and_assert("perf", {
+  it("does not route by explicit X-Client-Id when selectors are absent", function()
+    request_and_assert("it", {
       headers = {
         ["X-Client-Id"] = "perf_client",
       },
-      expected_received_client_id = "perf_client",
     })
   end)
 
-  it("keeps access selector priority above OIDC client_id and X-Client-Id", function()
+  it("keeps access selector priority above introspection header client_id", function()
     request_and_assert("dev", {
       headers = {
         ["X-Upstream-Env-AP"] = "dev",
-        ["X-Client-Id"] = "perf_client",
-        ["Authorization"] = "Bearer " .. jwt_for_client_id("qa_client"),
+        ["X-Introspection-Response"] = "eyJjbGllbnRfaWQiOiJwZXJmX2NsaWVudCJ9",
       },
     })
   end)

@@ -1,5 +1,5 @@
 meta {
-  name: 10-Req-Client-Id Header To Perf
+  name: 10-Req-Client-Id Header Ignored Without Introspection
   type: http
   seq: 10
 }
@@ -21,13 +21,13 @@ tests {
     expect(res.getStatus()).to.equal(200);
   });
   
-  test("routes to perf", function() {
+  test("keeps default upstream it", function() {
     const body = JSON.parse(res.getBody());
-    expect(body.environment.ECHO_RESPONSE).to.equal("perf");
+    expect(body.environment.ECHO_RESPONSE).to.equal("it");
   });
 }
 
 docs {
-  Explicit X-Client-Id should route to mapped upstream when no higher selector matches.
-  Expected backend: perf.
+  Inbound X-Client-Id is ignored for routing.
+  Expected backend: it.
 }

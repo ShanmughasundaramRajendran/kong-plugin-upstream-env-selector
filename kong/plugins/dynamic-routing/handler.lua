@@ -1,12 +1,10 @@
 local kong = kong
 local ngx = ngx
-local cjson = require "cjson.safe"
 
 local _M = {
   VERSION = "1.0.0",
-  -- Must run after OpenID Connect so introspection headers/consumer context
-  -- are available before dynamic upstream selection.
-  -- Keep this intentionally below OIDC across Kong versions.
+  -- Must run after auth plugins so consumer context is available before
+  -- username-based dynamic upstream selection.
   PRIORITY = 800,
 }
 
@@ -18,10 +16,8 @@ local _M = {
 local BY_SNI = "sni"
 local BY_HEADER = "header_name"
 local BY_QPARAM_NAME = "query_param_name"
-local DEFAULT_UPSTREAM_HEADER_NAME = "X-Upstream-Header"
+local DEFAULT_UPSTREAM_HEADER_NAME = "X-Upstream-Env"
 local DEFAULT_CLIENT_ID_HEADER_NAME = "X-Client-Id"
-local DEFAULT_INTROSPECTION_HEADER_NAME = "X-Kong-Introspection-Response"
-local UPSTREAM_ENV_TAG_PREFIX = "upstream_env:"
 
 local function is_non_empty_string(v)
   return type(v) == "string" and v ~= ""
@@ -41,98 +37,6 @@ local function first_non_empty_string(value)
   end
 
   return nil
-end
-
-local function decode_base64(data)
-  if type(data) ~= "string" or data == "" then
-    return nil
-  end
-
-  if ngx and ngx.decode_base64 then
-    return ngx.decode_base64(data)
-  end
-
-  local ok, mime = pcall(require, "mime")
-  if ok and mime and mime.unb64 then
-    return mime.unb64(data)
-  end
-
-  return nil
-end
-
-local function get_introspection_claim_client_id(cfg)
-  local header_name = (cfg and cfg.introspection_header_name) or DEFAULT_INTROSPECTION_HEADER_NAME
-  local encoded = first_non_empty_string(kong.request.get_header(header_name))
-  if not encoded then
-    return nil
-  end
-
-  local decoded_json = decode_base64(encoded)
-  if not decoded_json then
-    kong.log.err("dynamic-routing: failed to decode introspection header: ", header_name)
-    return nil
-  end
-
-  local claims = cjson.decode(decoded_json)
-  if type(claims) ~= "table" then
-    kong.log.err("dynamic-routing: failed to parse introspection JSON from header: ", header_name)
-    return nil
-  end
-
-  return first_non_empty_string(claims.client_id)
-end
-
-local function get_consumer_upstream_env(consumer)
-  if type(consumer) ~= "table" then
-    return nil
-  end
-
-  local tags = consumer.tags
-  if type(tags) ~= "table" then
-    return nil
-  end
-
-  for _, tag in ipairs(tags) do
-    if type(tag) == "string" and tag:sub(1, #UPSTREAM_ENV_TAG_PREFIX) == UPSTREAM_ENV_TAG_PREFIX then
-      local env = tag:sub(#UPSTREAM_ENV_TAG_PREFIX + 1)
-      if is_non_empty_string(env) then
-        return env
-      end
-    end
-  end
-
-  return nil
-end
-
-local function get_upstream_by_names(names, upstreams)
-  if upstreams == nil or names == nil or #names == 0 then
-    return nil
-  end
-
-  for _, name in ipairs(names) do
-    if is_non_empty_string(name) then
-      local upstream = upstreams[name]
-      if upstream then
-        return upstream, name
-      end
-    end
-  end
-
-  return nil
-end
-
-local function get_upstream_by_default_header(header_name, upstreams)
-  if not is_non_empty_string(header_name) then
-    return nil
-  end
-
-  local value = kong.request.get_header(header_name)
-  if not value then
-    return nil
-  end
-
-  local names = type(value) == "table" and value or { value }
-  return get_upstream_by_names(names, upstreams)
 end
 
 local function get_upstream_by_sni(enabled, upstreams)
@@ -159,12 +63,16 @@ local function get_upstream_by_header(header_name, upstreams)
   end
 
   local env_name = kong.request.get_header(header_name)
-  if not env_name then
+  if not is_non_empty_string(env_name) then
     return nil
   end
 
-  local names = type(env_name) == "table" and env_name or { env_name }
-  return get_upstream_by_names(names, upstreams)
+  local upstream = upstreams[env_name]
+  if upstream then
+    return upstream, env_name
+  end
+
+  return nil
 end
 
 local function get_upstream_by_query_param(name, upstreams)
@@ -173,32 +81,66 @@ local function get_upstream_by_query_param(name, upstreams)
   end
 
   local env_name = kong.request.get_query_arg(name)
-  if not env_name then
+  if not is_non_empty_string(env_name) then
     return nil
   end
 
-  local names = type(env_name) == "table" and env_name or { env_name }
-  return get_upstream_by_names(names, upstreams)
+  local upstream = upstreams[env_name]
+  if upstream then
+    return upstream, env_name
+  end
+
+  return nil
 end
 
 local function resolve_policy_upstream(policy, upstreams, policy_name)
-  policy = policy or {}
+  local policy_scope = policy_name == "access_policy" and "access policy" or "endpoint policy"
+
+  if policy == nil then
+    return nil
+  end
+
+  if type(policy) ~= "table" then
+    kong.log(policy_name, " policy is invalid (expected table, got ", type(policy), ")")
+    return nil
+  end
+
+  if not (policy[BY_SNI]
+    or is_non_empty_string(policy[BY_HEADER])
+    or is_non_empty_string(policy[BY_QPARAM_NAME])) then
+    kong.log(policy_name, " has no selectors configured")
+    return nil
+  end
 
   local upstream, key = get_upstream_by_sni(policy[BY_SNI], upstreams)
   if upstream then
-    kong.log.debug("dynamic-routing: upstream env by ", policy_name, " sni: ", upstream)
+    kong.log(
+      "rerouting request to upstream ", upstream,
+      " because ", policy_scope, " SNI selector matched value ", key,
+      " (reason=", policy_name, "_sni)"
+    )
     return upstream, key, policy_name .. "_sni"
   end
 
   upstream, key = get_upstream_by_header(policy[BY_HEADER], upstreams)
   if upstream then
-    kong.log.debug("dynamic-routing: upstream env by ", policy_name, " header: ", upstream)
+    kong.log(
+      "rerouting request to upstream ", upstream,
+      " because ", policy_scope, " header selector ", policy[BY_HEADER],
+      " matched selector key ", key,
+      " (reason=", policy_name, "_header)"
+    )
     return upstream, key, policy_name .. "_header"
   end
 
   upstream, key = get_upstream_by_query_param(policy[BY_QPARAM_NAME], upstreams)
   if upstream then
-    kong.log.debug("dynamic-routing: upstream env by ", policy_name, " query param: ", upstream)
+    kong.log(
+      "rerouting request to upstream ", upstream,
+      " because ", policy_scope, " query-param selector ", policy[BY_QPARAM_NAME],
+      " matched selector key ", key,
+      " (reason=", policy_name, "_query)"
+    )
     return upstream, key, policy_name .. "_query"
   end
 
@@ -212,61 +154,51 @@ local function set_upstream(upstream_name, reason, selector_key)
   kong.ctx.shared.upstream_selector_key = selector_key
 end
 
-local function validate_inputs(cfg)
-  if type(cfg) ~= "table" or not next(cfg) then
-    return "dynamic-routing: No config loaded"
+local function validate_policy_config(policy, policy_name)
+  if policy == nil then
+    return nil
   end
 
-  local accp = cfg.access_policy
-  local epcp = cfg.endpoint
-
-  if accp ~= nil and type(accp) ~= "table" then
-    return "dynamic-routing: Invalid configuration for access_policy"
+  if type(policy) ~= "table" then
+    return policy_name .. " must be a table"
   end
 
-  if epcp ~= nil and type(epcp) ~= "table" then
-    return "dynamic-routing: Invalid configuration for endpoint policy"
-  end
-
-  accp = accp or {}
-  epcp = epcp or {}
-
-  if not (accp.sni or accp.query_param_name or accp.header_name
-    or epcp.sni or epcp.query_param_name or epcp.header_name) then
-    return "dynamic-routing: No config values found"
+  if not (policy[BY_SNI]
+    or is_non_empty_string(policy[BY_HEADER])
+    or is_non_empty_string(policy[BY_QPARAM_NAME])) then
+    return policy_name .. " must configure at least one selector (sni/header_name/query_param_name)"
   end
 
   return nil
 end
 
-local function get_client_id(cfg)
-  local header_name = (cfg and cfg.client_id_header_name) or DEFAULT_CLIENT_ID_HEADER_NAME
-  local client_id = first_non_empty_string(kong.request.get_header(header_name))
-
-  if client_id then
-    return client_id
+function _M:configure(configs)
+  if type(configs) ~= "table" then
+    return
   end
 
-  client_id = get_introspection_claim_client_id(cfg)
-  if client_id then
-    return client_id
-  end
+  for _, plugin_conf in ipairs(configs) do
+    local cfg = plugin_conf.config or plugin_conf
+    if type(cfg) == "table" then
+      local err = validate_policy_config(cfg.access_policy, "access_policy")
+      if not err then
+        err = validate_policy_config(cfg.endpoint, "endpoint")
+      end
 
+      if err then
+        error("invalid dynamic-routing plugin configuration: " .. err)
+      end
+    end
+  end
+end
+
+local function get_client_id()
   local consumer
   if kong.client and kong.client.get_consumer then
     consumer = kong.client.get_consumer()
   end
 
-  local consumer_upstream_env = get_consumer_upstream_env(consumer)
-  if consumer_upstream_env then
-    return consumer_upstream_env
-  end
-
-  if consumer then
-    return first_non_empty_string({ consumer.custom_id, consumer.username, consumer.id })
-  end
-
-  return nil
+  return consumer and first_non_empty_string(consumer.username) or nil
 end
 
 function _M:access(cfg)
@@ -275,43 +207,40 @@ function _M:access(cfg)
   -- 1) default header
   -- 2) access policy / service-context-root selectors (sni -> header -> query)
   -- 3) endpoint policy / endpoint-subpath selectors (sni -> header -> query)
-  -- 4) client_id chain (X-Client-Id -> OIDC introspection claim -> consumer)
+  -- 4) client_id from authenticated consumer.username
   if type(cfg) ~= "table" then
-    kong.log.debug("dynamic-routing: No config loaded")
+    kong.log("No config loaded")
     return
   end
 
   local upstreams = cfg.upstreams
   if type(upstreams) ~= "table" then
-    kong.log.debug("dynamic-routing: Missing upstream map")
+    kong.log("Missing upstream map")
     return
   end
 
   local default_header_name = cfg.upstream_header_name or DEFAULT_UPSTREAM_HEADER_NAME
 
-  local upstream, key, reason = get_upstream_by_default_header(default_header_name, upstreams)
+  local upstream, key, reason = get_upstream_by_header(default_header_name, upstreams)
   if upstream then
-    kong.log.debug("dynamic-routing: upstream found using default header: ", upstream)
+    kong.log("upstream found using default header: ", upstream)
     set_upstream(upstream, "default_header", key)
     return
   end
 
-  local err = validate_inputs(cfg)
-  if not err then
-    upstream, key, reason = resolve_policy_upstream(cfg.access_policy, upstreams, "access_policy")
-    if upstream then
-      set_upstream(upstream, reason, key)
-      return
-    end
-
-    upstream, key, reason = resolve_policy_upstream(cfg.endpoint, upstreams, "endpoint")
-    if upstream then
-      set_upstream(upstream, reason, key)
-      return
-    end
+  upstream, key, reason = resolve_policy_upstream(cfg.access_policy, upstreams, "access_policy")
+  if upstream then
+    set_upstream(upstream, reason, key)
+    return
   end
 
-  local client_id = get_client_id(cfg)
+  upstream, key, reason = resolve_policy_upstream(cfg.endpoint, upstreams, "endpoint")
+  if upstream then
+    set_upstream(upstream, reason, key)
+    return
+  end
+
+  local client_id = get_client_id()
   if client_id then
     local client_id_header_name = (cfg and cfg.client_id_header_name) or DEFAULT_CLIENT_ID_HEADER_NAME
     if kong.service and kong.service.request and kong.service.request.set_header then
@@ -320,17 +249,13 @@ function _M:access(cfg)
 
     upstream = upstreams[client_id]
     if upstream then
-      kong.log.debug("dynamic-routing: upstream env by client id: ", upstream)
+      kong.log("rerouting request to upstream ", upstream, " based on consumer.username ", client_id)
       set_upstream(upstream, "client_id", client_id)
       return
     end
   end
 
-  if err then
-    kong.log.debug(err)
-  end
-
-  kong.log.debug("dynamic-routing: No custom environments configured, using default/primary environment")
+  kong.log("No custom environments configured, using default/primary environment")
 end
 
 return _M

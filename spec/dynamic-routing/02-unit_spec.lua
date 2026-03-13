@@ -8,6 +8,15 @@ describe("dynamic-routing (unit)", function()
 
   local function stub_kong(stubs)
     local existing_ngx = _G.ngx or {}
+    local log_tbl = {
+      debug = function() end,
+      err = function() end,
+      warn = function() end,
+      info = function() end,
+    }
+    setmetatable(log_tbl, {
+      __call = function() end,
+    })
 
     _G.kong = {
       request = {
@@ -25,10 +34,7 @@ describe("dynamic-routing (unit)", function()
           end,
         },
       },
-      log = {
-        debug = function() end,
-        err = function() end,
-      },
+      log = log_tbl,
       ctx = { shared = {} },
     }
 
@@ -57,9 +63,12 @@ describe("dynamic-routing (unit)", function()
         dev_client = "up-dev",
         qa_client = "up-qa",
         prod_client = "up-prod",
+        ["dev-client-app"] = "up-dev",
+        ["qa-client-app"] = "up-qa",
+        ["prod-client-app"] = "up-prod",
         ["sni.example.com"] = "up-qa",
       },
-      upstream_header_name = "X-Upstream-Header",
+      upstream_header_name = "X-Upstream-Env",
       client_id_header_name = "X-Client-Id",
       introspection_header_name = "X-Introspection-Response",
       access_policy = {
@@ -75,11 +84,11 @@ describe("dynamic-routing (unit)", function()
     }
   end)
 
-  it("priority #1: uses X-Upstream-Header header", function()
+  it("priority #1: uses X-Upstream-Env header", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Header" then return "dev" end
+        if name == "X-Upstream-Env" then return "dev" end
         return nil
       end,
       set_upstream = function(u) selected = u end,
@@ -90,11 +99,11 @@ describe("dynamic-routing (unit)", function()
     assert.equal("default_header", kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("default header supports table values and picks first match", function()
+  it("default header uses direct string value", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Header" then return { "unknown", "qa" } end
+        if name == "X-Upstream-Env" then return "qa" end
         return nil
       end,
       set_upstream = function(u) selected = u end,
@@ -146,11 +155,11 @@ describe("dynamic-routing (unit)", function()
     assert.equal("access_policy_query", kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("access policy query supports table values and picks first match", function()
+  it("access policy query uses direct string value", function()
     local selected
     local plugin = load_plugin({
       get_query_arg = function(name)
-        if name == "apUpsByQP" then return { "unknown", "qa" } end
+        if name == "apUpsByQP" then return "qa" end
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
@@ -178,33 +187,29 @@ describe("dynamic-routing (unit)", function()
     assert.equal("endpoint_header", kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("last priority: client id header", function()
+  it("does not route by inbound X-Client-Id when introspection claim is absent", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Client-Id" then return "dev_client" end
+        if name == "X-Client-Id" then
+          return "dev_client"
+        end
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-dev", selected)
-    assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
-    assert.equal("dev_client", set_header_calls["X-Client-Id"])
+    assert.is_nil(selected)
+    assert.is_nil(kong.ctx.shared.upstream_selector_reason)
+    assert.is_nil(set_header_calls["X-Client-Id"])
   end)
 
-  it("falls back to introspection claim client_id when client id header is absent", function()
+  it("routes by consumer.username when available", function()
     local selected
-    local introspection_payload = "eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ=="
     local plugin = load_plugin({
-      get_header = function(name)
-        if name == "X-Introspection-Response" then
-          return introspection_payload
-        end
-      end,
       get_consumer = function()
-        return { custom_id = "prod_client" }
+        return { username = "qa-client-app" }
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
@@ -213,15 +218,15 @@ describe("dynamic-routing (unit)", function()
     plugin:access(cfg)
     assert.equal("up-qa", selected)
     assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
-    assert.equal("qa_client", set_header_calls["X-Client-Id"])
+    assert.equal("qa-client-app", set_header_calls["X-Client-Id"])
   end)
 
-  it("uses consumer upstream_env tag when present", function()
+  it("does not use consumer upstream_env tag when username is present", function()
     local selected
     local plugin = load_plugin({
       get_consumer = function()
         return {
-          custom_id = "neutral_client",
+          username = "qa-client-app",
           tags = { "upstream_env:qa" },
         }
       end,
@@ -232,57 +237,52 @@ describe("dynamic-routing (unit)", function()
     plugin:access(cfg)
     assert.equal("up-qa", selected)
     assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
-    assert.equal("qa", set_header_calls["X-Client-Id"])
+    assert.equal("qa-client-app", set_header_calls["X-Client-Id"])
   end)
 
-  it("introspection claim takes precedence over consumer upstream_env tag", function()
+  it("does not route by introspection claim when consumer is missing", function()
     local selected
-    local introspection_payload = "eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0="
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Introspection-Response" then
-          return introspection_payload
+          return "eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0="
         end
-      end,
-      get_consumer = function()
-        return {
-          custom_id = "neutral_client",
-          tags = { "upstream_env:prod" },
-        }
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-dev", selected)
-    assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
-    assert.equal("dev_client", set_header_calls["X-Client-Id"])
+    assert.is_nil(selected)
+    assert.is_nil(kong.ctx.shared.upstream_selector_reason)
+    assert.is_nil(set_header_calls["X-Client-Id"])
   end)
 
-  it("falls back to introspection claim client_id when client id header is empty", function()
+  it("uses consumer.username even when introspection and inbound X-Client-Id are present", function()
     local selected
-    local introspection_payload = "eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0="
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Client-Id" then
-          return ""
+          return "prod_client"
         end
         if name == "X-Introspection-Response" then
-          return introspection_payload
+          return "eyJjbGllbnRfaWQiOiJkZXZfY2xpZW50In0="
         end
+      end,
+      get_consumer = function()
+        return { username = "qa-client-app" }
       end,
       ngx = { var = {} },
       set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-dev", selected)
+    assert.equal("up-qa", selected)
     assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
-    assert.equal("dev_client", set_header_calls["X-Client-Id"])
+    assert.equal("qa-client-app", set_header_calls["X-Client-Id"])
   end)
 
-  it("fallback to authenticated consumer object when header and token are absent", function()
+  it("falls back to no routing when consumer.username is absent", function()
     local selected
     local plugin = load_plugin({
       get_consumer = function()
@@ -293,9 +293,9 @@ describe("dynamic-routing (unit)", function()
     })
 
     plugin:access(cfg)
-    assert.equal("up-qa", selected)
-    assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
-    assert.equal("qa_client", set_header_calls["X-Client-Id"])
+    assert.is_nil(selected)
+    assert.is_nil(kong.ctx.shared.upstream_selector_reason)
+    assert.is_nil(set_header_calls["X-Client-Id"])
   end)
 
   it("does not block when no selector matches", function()
@@ -320,7 +320,7 @@ describe("dynamic-routing (unit)", function()
     local set_upstream_calls = 0
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Header" then return "  DEV  " end
+        if name == "X-Upstream-Env" then return "  DEV  " end
       end,
       set_upstream = function()
         set_upstream_calls = set_upstream_calls + 1
@@ -332,26 +332,26 @@ describe("dynamic-routing (unit)", function()
     assert.equal(0, set_upstream_calls)
   end)
 
-  it("default header table ignores empty values and picks first valid match", function()
+  it("default header ignores non-string values", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Header" then return { "", "unknown", "qa" } end
+        if name == "X-Upstream-Env" then return { "", "qa" } end
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
     })
 
     plugin:access(cfg)
-    assert.equal("up-qa", selected)
-    assert.equal("default_header", kong.ctx.shared.upstream_selector_reason)
+    assert.is_nil(selected)
+    assert.is_nil(kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("endpoint header supports table values and picks first valid match", function()
+  it("endpoint header ignores non-string values", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
-        if name == "X-Upstream-Env-EP" then return { "unknown", "prod" } end
+        if name == "X-Upstream-Env-EP" then return { "prod" } end
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
@@ -360,15 +360,15 @@ describe("dynamic-routing (unit)", function()
     cfg.access_policy = {}
     plugin:access(cfg)
 
-    assert.equal("up-prod", selected)
-    assert.equal("endpoint_header", kong.ctx.shared.upstream_selector_reason)
+    assert.is_nil(selected)
+    assert.is_nil(kong.ctx.shared.upstream_selector_reason)
   end)
 
-  it("endpoint query supports table values and picks first valid match", function()
+  it("endpoint query ignores non-string values", function()
     local selected
     local plugin = load_plugin({
       get_query_arg = function(name)
-        if name == "epUpsByQP" then return { "unknown", "qa" } end
+        if name == "epUpsByQP" then return { "qa" } end
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
@@ -380,8 +380,8 @@ describe("dynamic-routing (unit)", function()
     }
 
     plugin:access(cfg)
-    assert.equal("up-qa", selected)
-    assert.equal("endpoint_query", kong.ctx.shared.upstream_selector_reason)
+    assert.is_nil(selected)
+    assert.is_nil(kong.ctx.shared.upstream_selector_reason)
   end)
 
   it("keeps access policy precedence above endpoint policy", function()
@@ -426,6 +426,42 @@ describe("dynamic-routing (unit)", function()
     assert.equal("endpoint_header", kong.ctx.shared.upstream_selector_reason)
   end)
 
+  it("still evaluates endpoint policy when access policy config is invalid", function()
+    local selected
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "X-Upstream-Env-EP" then return "prod" end
+      end,
+      ngx = { var = {} },
+      set_upstream = function(u) selected = u end,
+    })
+
+    cfg.access_policy = "invalid-policy"
+
+    plugin:access(cfg)
+
+    assert.equal("up-prod", selected)
+    assert.equal("endpoint_header", kong.ctx.shared.upstream_selector_reason)
+  end)
+
+  it("still evaluates access policy when endpoint policy config is invalid", function()
+    local selected
+    local plugin = load_plugin({
+      get_header = function(name)
+        if name == "X-Upstream-Env-AP" then return "qa" end
+      end,
+      ngx = { var = {} },
+      set_upstream = function(u) selected = u end,
+    })
+
+    cfg.endpoint = "invalid-policy"
+
+    plugin:access(cfg)
+
+    assert.equal("up-qa", selected)
+    assert.equal("access_policy_header", kong.ctx.shared.upstream_selector_reason)
+  end)
+
   it("supports endpoint policy sni when access policy sni is disabled", function()
     local selected
     cfg.upstreams["endpoint.example.com"] = "up-prod"
@@ -444,18 +480,16 @@ describe("dynamic-routing (unit)", function()
     assert.equal("endpoint.example.com", kong.ctx.shared.upstream_selector_key)
   end)
 
-  it("introspection header table uses first value for client_id extraction", function()
+  it("ignores introspection header values and uses consumer.username", function()
     local selected
-    local qa_introspection = "eyJjbGllbnRfaWQiOiJxYV9jbGllbnQifQ=="
-    local prod_introspection = "eyJjbGllbnRfaWQiOiJwcm9kX2NsaWVudCJ9"
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Introspection-Response" then
-          return {
-            qa_introspection,
-            prod_introspection,
-          }
+          return { "eyJjbGllbnRfaWQiOiJwcm9kX2NsaWVudCJ9" }
         end
+      end,
+      get_consumer = function()
+        return { username = "qa-client-app" }
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
@@ -463,10 +497,10 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("qa_client", set_header_calls["X-Client-Id"])
+    assert.equal("qa-client-app", set_header_calls["X-Client-Id"])
   end)
 
-  it("ignores malformed introspection payload and falls back to authenticated consumer", function()
+  it("uses consumer.username when introspection payload is malformed", function()
     local selected
     local plugin = load_plugin({
       get_header = function(name)
@@ -475,7 +509,7 @@ describe("dynamic-routing (unit)", function()
         end
       end,
       get_consumer = function()
-        return { custom_id = "prod_client" }
+        return { username = "prod-client-app" }
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
@@ -483,20 +517,19 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-prod", selected)
-    assert.equal("prod_client", set_header_calls["X-Client-Id"])
+    assert.equal("prod-client-app", set_header_calls["X-Client-Id"])
   end)
 
-  it("ignores introspection payload without string client_id and falls back to consumer", function()
+  it("uses consumer.username even when introspection payload has non-string client_id", function()
     local selected
-    local non_string_client_id_claim = "eyJjbGllbnRfaWQiOjEyM30="
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Introspection-Response" then
-          return non_string_client_id_claim
+          return "eyJjbGllbnRfaWQiOjEyM30="
         end
       end,
       get_consumer = function()
-        return { custom_id = "qa_client" }
+        return { username = "qa-client-app" }
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },
@@ -504,7 +537,7 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("qa_client", set_header_calls["X-Client-Id"])
+    assert.equal("qa-client-app", set_header_calls["X-Client-Id"])
   end)
 
   it("does not fail when cfg is nil", function()
@@ -543,8 +576,8 @@ describe("dynamic-routing (unit)", function()
   it("still routes by client_id when kong.service.request.set_header is unavailable", function()
     local selected
     local plugin = load_plugin({
-      get_header = function(name)
-        if name == "X-Client-Id" then return "qa_client" end
+      get_consumer = function()
+        return { username = "qa-client-app" }
       end,
       set_upstream = function(u) selected = u end,
       ngx = { var = {} },

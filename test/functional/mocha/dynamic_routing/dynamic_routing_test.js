@@ -73,15 +73,15 @@ function assertOkAndBackend(response, body, expected) {
 describe("dynamic-routing functional suite (image-aligned precedence)", function () {
   this.timeout(120000);
 
-  it("should select primary upstream when no custom selectors and no X-Upstream-Header header", async function () {
+  it("should select primary upstream when no custom selectors and no X-Upstream-Env header", async function () {
     const { response, body } = await getRoute(ROUTE_PATH);
     assertOkAndBackend(response, body, "it");
   });
 
-  it("should select upstream based on default X-Upstream-Header header", async function () {
+  it("should select upstream based on default X-Upstream-Env header", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Upstream-Header": "dev",
+        "X-Upstream-Env": "dev",
       },
     });
     assertOkAndBackend(response, body, "dev");
@@ -90,7 +90,7 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
   it("should select default header over access and endpoint selectors", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
-        "X-Upstream-Header": "qa",
+        "X-Upstream-Env": "qa",
         "X-Upstream-Env-AP": "dev",
         "X-Upstream-Env-EP": "prod",
       },
@@ -170,7 +170,7 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
     assertOkAndBackend(response, body, "it");
   });
 
-  it("should route by OIDC introspection client_id when header is present", async function () {
+  it("should ignore OIDC introspection client_id when selectors are absent", async function () {
     const introspection = Buffer.from(JSON.stringify({
       client_id: "perf_client",
       active: true,
@@ -182,25 +182,29 @@ describe("dynamic-routing functional suite (image-aligned precedence)", function
         "X-Introspection-Response": introspection,
       },
     });
-    assertOkAndBackend(response, body, "perf");
+    assertOkAndBackend(response, body, "it");
   });
 
-  it("should route by explicit X-Client-Id header when no higher selectors match", async function () {
+  it("should not route by explicit X-Client-Id when selectors are absent", async function () {
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
         "X-Client-Id": "perf_client",
         Authorization: `Bearer ${createJwtWithClientId("neutral_client")}`,
       },
     });
-    assertOkAndBackend(response, body, "perf");
+    assertOkAndBackend(response, body, "it");
   });
 
-  it("should keep OIDC client_id/X-Client-Id as lower priority than selectors", async function () {
+  it("should keep access selector priority above ignored introspection client_id", async function () {
+    const introspection = Buffer.from(JSON.stringify({
+      client_id: "perf_client",
+      active: true,
+    })).toString("base64");
+
     const { response, body } = await getRoute(ROUTE_PATH, {
       headers: {
         "X-Upstream-Env-AP": "dev",
-        "X-Client-Id": "perf_client",
-        Authorization: `Bearer ${createJwtWithClientId("qa_client")}`,
+        "X-Introspection-Response": introspection,
       },
     });
     assertOkAndBackend(response, body, "dev");

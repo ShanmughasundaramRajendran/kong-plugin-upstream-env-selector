@@ -5,8 +5,8 @@ meta {
 }
 
 docs {
-  Verifies consumer application upstream_env tag is used as fallback when no selector and no introspection header are provided.
-  Token uses neutral consumer credential (tag upstream_env:it).
+  Verifies non-selector token claims do not affect routing in this flow.
+  Token uses neutral consumer credential.
   Expected backend: it.
 }
 
@@ -26,7 +26,7 @@ tests {
     expect(res.getStatus()).to.equal(200);
   });
 
-  test("routes to it (consumer tag precedence)", function() {
+  test("routes to it", function() {
     const body = JSON.parse(res.getBody());
     expect(body.environment.ECHO_RESPONSE).to.equal("it");
   });

@@ -5,20 +5,61 @@ Kong plugin + local demo stack + test suites for request-based upstream selectio
 Plugin-level docs:
 `kong/plugins/dynamic-routing/README.md`
 
-## Routing Priority
+## How It Works
 
-The plugin checks selectors in this order and picks the first matching upstream key:
+This plugin overrides which upstream a request is routed to by mapping selector values from request context to entries in `config.upstreams`.
 
-1. `X-Upstream-Header`
-2. `access_policy.sni` for service-context-root access policy
-3. `access_policy.header_name` for service-context-root access policy
-4. `access_policy.query_param_name` for service-context-root access policy
-5. `endpoint.sni` for endpoint-subpath policy
-6. `endpoint.header_name` for endpoint-subpath policy
-7. `endpoint.query_param_name` for endpoint-subpath policy
-8. `X-Client-Id` header; if absent, plugin extracts `client_id` from OIDC introspection response header (then authenticated consumer tag/id fallback)
+Per request:
 
-If nothing matches, it does not block the request; Kong keeps default routing.
+1. Evaluate selectors in strict order.
+2. Extract selector value from request (header/query/SNI/consumer).
+3. If selector value exists as a key in `config.upstreams`, call `kong.service.set_upstream(...)`.
+4. Stop at first match.
+5. If nothing matches, continue with service default upstream.
+
+### Routing Priority
+
+1. `upstream_header_name` (default `X-Upstream-Env`)
+2. `access_policy.sni`
+3. `access_policy.header_name`
+4. `access_policy.query_param_name`
+5. `endpoint.sni`
+6. `endpoint.header_name`
+7. `endpoint.query_param_name`
+8. authenticated `consumer.username` (forwarded upstream as `X-Client-Id` by default)
+
+### Selector Matching Examples
+
+Given:
+
+```yaml
+upstreams:
+  dev: orders-api-dev-upstream
+  qa: orders-api-qa-upstream
+  prod: orders-api-prod-upstream
+  qa-client-app: orders-api-qa-upstream
+```
+
+1. If `X-Upstream-Env=dev`, route to `orders-api-dev-upstream`.
+2. Else if `access_policy.sni=true` and TLS SNI is `qa`, route to `orders-api-qa-upstream`.
+3. Else if `access_policy.header_name=X-Upstream-Env-AP` and header value is `prod`, route to `orders-api-prod-upstream`.
+4. Else if `access_policy.query_param_name=apUpsByQP` and query value is `qa`, route to `orders-api-qa-upstream`.
+5. Else endpoint selectors run in same order (`sni -> header -> query`).
+6. Else if authenticated `consumer.username=qa-client-app`, route to `orders-api-qa-upstream`.
+7. Else service default upstream is used.
+
+### Plugin Config Fields
+
+Defined in [`schema.lua`](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/kong/plugins/dynamic-routing/schema.lua):
+
+- `upstreams`: required map of selector key -> upstream name (must have at least one entry)
+- `upstream_header_name`: required string, default `X-Upstream-Env`
+- `access_policy`: optional record with `sni`, `header_name`, `query_param_name` (at least one required when block is present)
+- `endpoint`: optional record with `sni`, `header_name`, `query_param_name` (at least one required when block is present)
+- `client_id_header_name`: required string, default `X-Client-Id` (forwarding header for resolved consumer username)
+- `introspection_header_name`: optional string, default `X-Kong-Introspection-Response` (currently not used for routing decisions)
+
+For detailed plugin docs, see [plugin README](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/kong/plugins/dynamic-routing/README.md).
 
 ## Local Stack
 
@@ -46,7 +87,7 @@ Notes:
 - Local Keycloak is provisioned from `config/keycloak/kong-local-realm.json`.
 - OIDC plugin entries point to local Keycloak via `http://host.docker.internal:8085` (from inside Kong container) and use `kong-introspector` client credentials.
 - OIDC plugins are `enabled: false` by default; set `enabled: true` in `config/kong.yml` to enforce token validation.
-- Dynamic-routing reads `client_id` from the configured introspection response header when `X-Client-Id` is not sent.
+- Dynamic-routing resolves `client_id` from `kong.client.get_consumer().username`.
 
 ## Local Keycloak Credentials
 
@@ -126,8 +167,8 @@ make test-all
 - access policy header/query precedence
 - endpoint policy header/query precedence
 - fallback when higher-priority selectors are invalid
-- OIDC introspection `client_id` routing and explicit `X-Client-Id` routing
-- selector precedence over OIDC-derived `client_id`/`X-Client-Id`
+- authenticated consumer.username routing
+- selector precedence over consumer-derived client id
 - access-policy SNI routing
 - endpoint-policy SNI routing (route `/private/684130/developer-platform/gateway/clients-endpoint-sni`)
 - local declarative config uses one service with multiple `GET` routes (main path + endpoint-SNI path)
