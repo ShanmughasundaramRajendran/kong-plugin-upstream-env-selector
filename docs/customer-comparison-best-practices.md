@@ -43,26 +43,14 @@ flowchart TD
   - if table, returns first valid non-empty entry
   - supports multi-value headers/query args safely.
 
-### 3) Introspection decoding path
-
-- Lines `46-61`: `decode_base64(data)`:
-  - validates input
-  - prefers `ngx.decode_base64`
-  - fallback to Lua `mime.unb64` when available.
-- Lines `63-83`: `get_introspection_claim_client_id(cfg)`:
-  - reads configured introspection header
-  - base64 decodes to JSON payload
-  - parses JSON and extracts `client_id`
-  - logs error and returns `nil` for malformed data.
-
-### 4) Consumer fallback extraction
+### 3) Consumer fallback extraction
 
 - Lines `85-105`: `get_consumer_upstream_env(consumer)`:
   - scans `consumer.tags`
   - finds first tag prefix `upstream_env:`
   - returns suffix (for example `qa` from `upstream_env:qa`).
 
-### 5) Upstream lookup primitives
+### 4) Upstream lookup primitives
 
 - Lines `107-122`: `get_upstream_by_names(names, upstreams)`:
   - iterates candidate selector keys
@@ -72,7 +60,7 @@ flowchart TD
 - Lines `156-168`: lookup via configured request header.
 - Lines `170-182`: lookup via configured query param.
 
-### 6) Policy resolver and context tagging
+### 5) Policy resolver and context tagging
 
 - `resolve_policy_upstream(policy, upstreams, policy_name)`:
   - validates each policy independently:
@@ -90,15 +78,11 @@ flowchart TD
     - `upstream_selector_reason`
     - `upstream_selector_key`.
 
-### 7) Client-id fallback chain
+### 6) Client-id fallback chain
 
-- Lines `242-270`: `get_client_id(cfg)` resolves in order:
-  1. configured client-id header (`X-Client-Id` default)
-  2. introspection claim `client_id`
-  3. consumer tag `upstream_env:<env>`
-  4. consumer identifiers fallback: `custom_id` -> `username` -> `id`.
+- `get_client_id(cfg)` resolves from authenticated `consumer.username`.
 
-### 8) Core execution path: `access(cfg)`
+### 7) Core execution path: `access(cfg)`
 
 - Lines `272-282`: start of `access` phase; returns early if config is not a table.
 - Lines `284-288`: requires `cfg.upstreams` map; returns if missing.
@@ -126,9 +110,7 @@ The plugin chooses the first successful match in this order:
 6. `endpoint.header_name`
 7. `endpoint.query_param_name`
 8. client-id chain:
-   - `client_id_header_name`
-   - introspection header `client_id`
-   - consumer tag/id fallback
+   - authenticated `consumer.username`
 
 ## How `schema.lua` enforces contract
 
@@ -137,8 +119,6 @@ In `kong/plugins/dynamic-routing/schema.lua`:
 - Lines `15-20`: `config.upstreams` map is required.
 - Line `23`: `upstream_header_name` has default `X-Upstream-Env`.
 - Lines `25-44`: `access_policy` and `endpoint` records define optional `sni/header/query` selectors.
-- Lines `47-51`: `client_id_header_name` required with default `X-Client-Id`.
-- Lines `53-57`: `introspection_header_name` default `X-Kong-Introspection-Response`.
 
 ## How local `kong.yml` maps real traffic
 
@@ -148,7 +128,6 @@ In `config/kong.yml`:
   - selector header names
   - `upstreams` key-to-upstream map
   - access and endpoint selector field names
-- Lines `61-66` + `72`: OIDC and dynamic-routing share introspection header name (`X-Introspection-Response`).
 - Lines `94-142`: consumer identities and `upstream_env:*` tags support fallback routing.
 
 ## End-to-End Example (Concrete)

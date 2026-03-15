@@ -202,9 +202,8 @@ function _M:access(cfg)
 
   local client_id = get_client_id()
   if client_id then
-    local client_id_header_name = (cfg and cfg.client_id_header_name) or DEFAULT_CLIENT_ID_HEADER_NAME
     if kong.service and kong.service.request and kong.service.request.set_header then
-      kong.service.request.set_header(client_id_header_name, client_id)
+      kong.service.request.set_header(DEFAULT_CLIENT_ID_HEADER_NAME, client_id)
     end
 
     upstream = upstreams[client_id]

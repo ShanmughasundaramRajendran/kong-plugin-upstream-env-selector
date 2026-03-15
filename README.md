@@ -53,7 +53,6 @@ Defined in [`schema.lua`](/Users/shanmughasundaramrajendran/kong-plugin-upstream
 - `sni`: optional boolean selector flag (default `false`)
 - `header_name`: optional non-empty selector header name
 - `query_param_name`: optional non-empty selector query parameter name
-- `client_id_header_name`: required string, default `X-Client-Id` (forwarding header for resolved consumer username)
 
 For detailed plugin docs, see [plugin README](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/kong/plugins/dynamic-routing/README.md).
 
@@ -91,11 +90,7 @@ Client credentials for local token generation:
 - `it_client` / `it-client-secret`
 - `perf_client` / `perf-client-secret`
 
-Get token example:
-
-```bash
-examples/scripts/get_keycloak_token.sh it_client
-```
+Use the sample bearer token from [`examples/scripts/test_requests.sh`](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/examples/scripts/test_requests.sh) for local testing.
 
 Stop stack:
 

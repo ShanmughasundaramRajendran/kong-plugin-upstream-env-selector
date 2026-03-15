@@ -59,7 +59,6 @@ describe("dynamic-routing (unit)", function()
       header_name = "X-Upstream-Selector",
       query_param_name = "upsByQP",
       sni = true,
-      client_id_header_name = "X-Client-Id",
     }
   end)
 

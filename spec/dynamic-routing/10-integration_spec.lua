@@ -126,7 +126,6 @@ describe("dynamic-routing (integration)", function()
         sni = false,
         header_name = "X-Upstream-Selector",
         query_param_name = "upsByQP",
-        client_id_header_name = "X-Client-Id",
         upstreams = {
           dev = fixture.upstreams.dev,
           prod = fixture.upstreams.prod,

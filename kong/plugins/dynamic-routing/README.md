@@ -43,7 +43,7 @@ The plugin evaluates selectors in this exact order:
 2. `sni`
 3. `header_name`
 4. `query_param_name`
-5. authenticated `consumer.username` (also forwarded as `client_id_header_name`, default: `X-Client-Id`)
+5. authenticated `consumer.username` (forwarded upstream as `X-Client-Id`)
 
 ## Plugin Config Reference
 
@@ -74,11 +74,6 @@ All fields below are under `plugins[].config` in `schema.lua`:
   - Required: `false`
   - Constraint: non-empty when set
   - Purpose: request query selector
-- `client_id_header_name`:
-  - Type: `string`
-  - Required: `true`
-  - Default: `X-Client-Id`
-  - Purpose: header used to forward resolved `consumer.username` upstream
 
 ## Selector Matching Details
 
@@ -111,7 +106,6 @@ plugins:
   service: my-service
   config:
     upstream_header_name: X-Upstream-Env
-    client_id_header_name: X-Client-Id
     sni: true
     header_name: X-Upstream-Selector
     query_param_name: upsByQP
