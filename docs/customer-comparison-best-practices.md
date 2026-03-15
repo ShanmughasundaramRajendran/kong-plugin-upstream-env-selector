@@ -177,4 +177,4 @@ Execution:
 - Integration checks with live Kong upstream switching:
   - `spec/dynamic-routing/10-integration_spec.lua`
 - Functional scenarios on local stack:
-  - `test/functional/mocha/dynamic_routing/dynamic_routing_test.js`
+  - `tests/functional/pytest/test_dynamic_routing.py`

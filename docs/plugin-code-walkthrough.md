@@ -21,7 +21,7 @@ If no selector maps to `config.upstreams`, the request is not blocked. Kong uses
 - Behavior validation:
   - `spec/dynamic-routing/02-unit_spec.lua`
   - `spec/dynamic-routing/10-integration_spec.lua`
-  - `test/functional/mocha/dynamic_routing/dynamic_routing_test.js`
+  - `tests/functional/pytest/test_dynamic_routing.py`
 
 ## 3. Runtime placement inside Kong
 

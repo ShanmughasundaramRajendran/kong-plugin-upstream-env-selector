@@ -1,7 +1,7 @@
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
-.PHONY: help npm-install test test-integration test-pongo test-functional test-all \
+.PHONY: help install-pytest test test-integration test-pongo test-functional test-all \
 	lint compose-build compose-up compose-down clean demo package
 
 PONGO ?= pongo
@@ -16,12 +16,12 @@ help:
 	@echo "  make compose-down       Stop and remove local docker stack"
 	@echo "  make clean              Remove local stack and local built image"
 	@echo "  make demo               Run sample curl scenarios"
-	@echo "  make npm-install        Install Node dependencies for Mocha"
+	@echo "  make install-pytest     Install Python deps for functional tests"
 	@echo "  make test               Run Pongo unit tests"
 	@echo "  make test-integration   Run Pongo integration tests"
 	@echo "  make test-pongo         Run unit + integration tests"
-	@echo "  make test-functional    Run Mocha functional tests"
-	@echo "  make test-all           Run Pongo and Mocha suites"
+	@echo "  make test-functional    Run pytest functional tests"
+	@echo "  make test-all           Run Pongo and pytest suites"
 	@echo "  make lint               Run luacheck in Pongo image if available"
 	@echo "  make package            Build zip package"
 	@echo ""
@@ -31,8 +31,8 @@ help:
 	@echo "  ROUTE_PATH=/private/684130/developer-platform/gateway/clients"
 	@echo ""
 
-npm-install:
-	@npm install
+install-pytest:
+	@python3 -m pip install -r tests/functional/pytest/requirements-test.txt
 
 test:
 	@KONG_IMAGE=$(PONGO_KONG_IMAGE) $(PONGO) run -- -v spec/dynamic-routing/01-schema_spec.lua spec/dynamic-routing/02-unit_spec.lua
@@ -56,11 +56,11 @@ test-functional:
 		fi; \
 		sleep 1; \
 	done
-	@BASE_URL=$(BASE_URL) ROUTE_PATH=$(ROUTE_PATH) npm run test:functional
+	@BASE_URL=$(BASE_URL) ROUTE_PATH=$(ROUTE_PATH) python3 -m pytest -c tests/functional/pytest/pytest.ini tests/functional/pytest
 
 test-all:
 	@$(MAKE) test-pongo
-	@$(MAKE) npm-install
+	@$(MAKE) install-pytest
 	@$(MAKE) test-functional
 
 compose-build:
@@ -83,5 +83,5 @@ demo:
 
 package:
 	@rm -f kong-plugin-dynamic-routing_complete.zip
-	@zip -r kong-plugin-dynamic-routing_complete.zip kong spec rockspecs config .github docker-compose.yml Makefile Dockerfile package.json test bruno examples/scripts -x "*.DS_Store"
+	@zip -r kong-plugin-dynamic-routing_complete.zip kong spec rockspecs config .github docker-compose.yml Makefile Dockerfile test tests bruno examples/scripts -x "*.DS_Store"
 	@echo "Created kong-plugin-dynamic-routing_complete.zip"

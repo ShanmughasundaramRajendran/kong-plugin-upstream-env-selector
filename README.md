@@ -15,7 +15,7 @@ Per request:
 2. Extract selector value from request (header/query/SNI/consumer).
 3. If selector value exists as a key in `config.upstreams`, call `kong.service.set_upstream(...)`.
 4. Stop at first match.
-5. If nothing matches, continue with service default upstream.
+5. If nothing matches, continue with the route/service default upstream.
 
 ### Routing Priority
 
@@ -42,7 +42,7 @@ upstreams:
 3. Else if `header_name=X-Upstream-Selector` and header value is `prod`, route to `orders-api-prod-upstream`.
 4. Else if `query_param_name=upsByQP` and query value is `qa`, route to `orders-api-qa-upstream`.
 5. Else if authenticated `consumer.username=qa-client-app`, route to `orders-api-qa-upstream`.
-6. Else service default upstream is used.
+6. Else the route/service default upstream is used.
 
 ### Plugin Config Fields
 
@@ -111,13 +111,13 @@ make clean
 
 ## Test Commands
 
-Install JS deps:
+Install Python deps for functional tests:
 
 ```bash
-make npm-install
+make install-pytest
 ```
 
-Mocha functional tests:
+Pytest functional tests:
 
 ```bash
 make test-functional
@@ -152,7 +152,7 @@ make test-all
 - configured selector header/query precedence
 - explicit `X-Client-Id` ignored for routing
 - selector SNI routing
-- local declarative config uses one service and single selector set (`sni/header_name/query_param_name`)
+- local declarative config applies the plugin at route scope (both routes) and includes one consumer+route scoped instance (`qa-client-app` + `orders-api-main-route`)
 
 SNI Bruno setup:
 
