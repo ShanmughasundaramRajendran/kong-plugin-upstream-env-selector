@@ -1,21 +1,18 @@
 meta {
-  name: 07-Req-Endpoint Query To Dev
+  name: 07-Req-SNI To Dev
   type: http
   seq: 7
 }
 
 get {
-  url: {{base_url}}/private/684130/developer-platform/gateway/clients
+  url: {{sni_access_base_url}}/private/684130/developer-platform/gateway/clients
   body: none
   auth: none
 }
 
-params:query {
-  epUpsByQP: dev
-}
-
 headers {
   Accept: application/json
+  Host: access-sni-dev.local
   Authorization: Bearer {{jwt_neutral_client}}
 }
 
@@ -31,6 +28,7 @@ tests {
 }
 
 docs {
-  Endpoint-policy query epUpsByQP is used when higher selectors are absent.
+  SNI selector routes request when TLS SNI matches an upstream key.
+  Prerequisite: host entry for access-sni-dev.local and TLS verification disabled in Bruno.
   Expected backend: dev.
 }

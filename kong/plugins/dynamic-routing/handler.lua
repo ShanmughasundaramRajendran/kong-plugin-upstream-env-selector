@@ -93,55 +93,37 @@ local function get_upstream_by_query_param(name, upstreams)
   return nil
 end
 
-local function resolve_policy_upstream(policy, upstreams, policy_name)
-  local policy_scope = policy_name == "access_policy" and "access policy" or "endpoint policy"
-
-  if policy == nil then
-    return nil
-  end
-
-  if type(policy) ~= "table" then
-    kong.log(policy_name, " policy is invalid (expected table, got ", type(policy), ")")
-    return nil
-  end
-
-  if not (policy[BY_SNI]
-    or is_non_empty_string(policy[BY_HEADER])
-    or is_non_empty_string(policy[BY_QPARAM_NAME])) then
-    kong.log(policy_name, " has no selectors configured")
-    return nil
-  end
-
-  local upstream, key = get_upstream_by_sni(policy[BY_SNI], upstreams)
+local function resolve_selector_upstream(cfg, upstreams)
+  local upstream, key = get_upstream_by_sni(cfg[BY_SNI], upstreams)
   if upstream then
     kong.log(
       "rerouting request to upstream ", upstream,
-      " because ", policy_scope, " SNI selector matched value ", key,
-      " (reason=", policy_name, "_sni)"
+      " because sni selector matched value ", key,
+      " (reason=sni)"
     )
-    return upstream, key, policy_name .. "_sni"
+    return upstream, key, "sni"
   end
 
-  upstream, key = get_upstream_by_header(policy[BY_HEADER], upstreams)
+  upstream, key = get_upstream_by_header(cfg[BY_HEADER], upstreams)
   if upstream then
     kong.log(
       "rerouting request to upstream ", upstream,
-      " because ", policy_scope, " header selector ", policy[BY_HEADER],
+      " because header selector ", cfg[BY_HEADER],
       " matched selector key ", key,
-      " (reason=", policy_name, "_header)"
+      " (reason=header)"
     )
-    return upstream, key, policy_name .. "_header"
+    return upstream, key, "header"
   end
 
-  upstream, key = get_upstream_by_query_param(policy[BY_QPARAM_NAME], upstreams)
+  upstream, key = get_upstream_by_query_param(cfg[BY_QPARAM_NAME], upstreams)
   if upstream then
     kong.log(
       "rerouting request to upstream ", upstream,
-      " because ", policy_scope, " query-param selector ", policy[BY_QPARAM_NAME],
+      " because query-param selector ", cfg[BY_QPARAM_NAME],
       " matched selector key ", key,
-      " (reason=", policy_name, "_query)"
+      " (reason=query)"
     )
-    return upstream, key, policy_name .. "_query"
+    return upstream, key, "query"
   end
 
   return nil
@@ -154,24 +136,6 @@ local function set_upstream(upstream_name, reason, selector_key)
   kong.ctx.shared.upstream_selector_key = selector_key
 end
 
-local function validate_policy_config(policy, policy_name)
-  if policy == nil then
-    return nil
-  end
-
-  if type(policy) ~= "table" then
-    return policy_name .. " must be a table"
-  end
-
-  if not (policy[BY_SNI]
-    or is_non_empty_string(policy[BY_HEADER])
-    or is_non_empty_string(policy[BY_QPARAM_NAME])) then
-    return policy_name .. " must configure at least one selector (sni/header_name/query_param_name)"
-  end
-
-  return nil
-end
-
 function _M:configure(configs)
   if type(configs) ~= "table" then
     return
@@ -180,13 +144,16 @@ function _M:configure(configs)
   for _, plugin_conf in ipairs(configs) do
     local cfg = plugin_conf.config or plugin_conf
     if type(cfg) == "table" then
-      local err = validate_policy_config(cfg.access_policy, "access_policy")
-      if not err then
-        err = validate_policy_config(cfg.endpoint, "endpoint")
+      if type(cfg.upstreams) ~= "table" then
+        error("invalid dynamic-routing plugin configuration: upstreams must be a table")
       end
 
-      if err then
-        error("invalid dynamic-routing plugin configuration: " .. err)
+      local has_selector = cfg[BY_SNI]
+        or is_non_empty_string(cfg[BY_HEADER])
+        or is_non_empty_string(cfg[BY_QPARAM_NAME])
+
+      if not has_selector then
+        kong.log("dynamic-routing config has no sni/header_name/query_param_name selectors; only default header/client id fallback will apply")
       end
     end
   end
@@ -205,9 +172,8 @@ function _M:access(cfg)
   -- ACCESS PHASE:
   -- Determine upstream using strict priority:
   -- 1) default header
-  -- 2) access policy / service-context-root selectors (sni -> header -> query)
-  -- 3) endpoint policy / endpoint-subpath selectors (sni -> header -> query)
-  -- 4) client_id from authenticated consumer.username
+  -- 2) configured selectors in this plugin instance (sni -> header -> query)
+  -- 3) client_id from authenticated consumer.username
   if type(cfg) ~= "table" then
     kong.log("No config loaded")
     return
@@ -228,13 +194,7 @@ function _M:access(cfg)
     return
   end
 
-  upstream, key, reason = resolve_policy_upstream(cfg.access_policy, upstreams, "access_policy")
-  if upstream then
-    set_upstream(upstream, reason, key)
-    return
-  end
-
-  upstream, key, reason = resolve_policy_upstream(cfg.endpoint, upstreams, "endpoint")
+  upstream, key, reason = resolve_selector_upstream(cfg, upstreams)
   if upstream then
     set_upstream(upstream, reason, key)
     return

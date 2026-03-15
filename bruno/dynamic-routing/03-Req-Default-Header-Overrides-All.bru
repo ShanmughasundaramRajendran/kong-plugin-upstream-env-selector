@@ -11,16 +11,14 @@ get {
 }
 
 params:query {
-  apUpsByQP: prod
-  epUpsByQP: dev
+  upsByQP: dev
 }
 
 headers {
   Accept: application/json
-  X-Upstream-Env-AP: qa
-  X-Upstream-Env-EP: prod
+  X-Upstream-Selector: prod
   Authorization: Bearer {{jwt_neutral_client}}
-  ~X-Upstream-Env: qa
+  X-Upstream-Env: qa
 }
 
 tests {
@@ -35,6 +33,6 @@ tests {
 }
 
 docs {
-  Default header has highest priority over access/endpoint selectors.
+  Default header has highest priority over configured selector header/query.
   Expected backend: qa.
 }

@@ -1,22 +1,21 @@
 meta {
-  name: 05-Req-Access Query Over Endpoint Header
+  name: 05-Req-Selector Query To Dev
   type: http
   seq: 5
 }
 
 get {
-  url: {{base_url}}/private/684130/developer-platform/gateway/clients?apUpsByQP=qa
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients?upsByQP=dev
   body: none
   auth: none
 }
 
 params:query {
-  apUpsByQP: qa
+  upsByQP: dev
 }
 
 headers {
   Accept: application/json
-  X-Upstream-Env-EP: prod
   Authorization: Bearer {{jwt_neutral_client}}
 }
 
@@ -32,6 +31,6 @@ tests {
 }
 
 docs {
-  Access-policy query env is evaluated before endpoint-policy header X-Upstream-Env-EP.
+  Selector query upsByQP is evaluated when default header and selector header are absent.
   Expected backend: dev.
 }

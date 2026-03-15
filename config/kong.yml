@@ -44,7 +44,9 @@ plugins:
   config:
     upstream_header_name: X-Upstream-Env
     client_id_header_name: X-Client-Id
-    introspection_header_name: X-Introspection-Response
+    sni: true
+    header_name: X-Upstream-Selector
+    query_param_name: upsByQP
     upstreams:
       dev: orders-api-dev-upstream
       prod: orders-api-prod-upstream
@@ -63,14 +65,6 @@ plugins:
       neutral-client-app: orders-api-it-upstream
       access-sni-dev.local: orders-api-dev-upstream
       endpoint-sni-qa.local: orders-api-qa-upstream
-    access_policy:
-      sni: true
-      header_name: X-Upstream-Env-AP
-      query_param_name: apUpsByQP
-    endpoint:
-      sni: true
-      header_name: X-Upstream-Env-EP
-      query_param_name: epUpsByQP
 
 consumers:
 - username: dev-client-app

@@ -1,23 +1,23 @@
 meta {
-  name: 04-Req-Access Header Over Query
+  name: 04-Req-Selector Header Over Query
   type: http
   seq: 4
 }
 
 get {
-  url: {{base_url}}/private/684130/developer-platform/gateway/clients?apUpsByQP=dev
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients?upsByQP=dev
   body: none
   auth: none
 }
 
 params:query {
-  apUpsByQP: dev
+  upsByQP: dev
 }
 
 headers {
   Accept: application/json
   Authorization: Bearer {{jwt_neutral_client}}
-  ~X-Upstream-Env-AP: qa
+  X-Upstream-Selector: qa
 }
 
 tests {
@@ -32,6 +32,6 @@ tests {
 }
 
 docs {
-  Access-policy header (X-Upstream-Env-AP) should win over access-policy query param apUpsByQP.
+  Selector header (X-Upstream-Selector) should win over selector query param upsByQP.
   Expected backend: qa.
 }

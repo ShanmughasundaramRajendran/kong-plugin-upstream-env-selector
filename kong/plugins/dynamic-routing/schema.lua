@@ -6,9 +6,7 @@ return {
   -- - name: dynamic-routing
   name = "dynamic-routing",
   fields = {
-    -- Scope: can be applied globally, per-service, or per-route.
-    -- It is intentionally not valid as a consumer-scoped plugin.
-    { consumer = typedefs.no_consumer },
+    -- Scope: can be applied globally, per-service, per-route, or per consumer+route.
     { protocols = typedefs.protocols_http },
     { config = {
         type = "record",
@@ -24,45 +22,15 @@ return {
           },
           -- Highest-priority request header.
           { upstream_header_name = { type = "string", required = true, default = "X-Upstream-Env" } },
-          -- Access policy selectors (evaluated before endpoint selectors).
-          { access_policy = {
-              type = "record",
-              required = false,
-              fields = {
-                { sni = { type = "boolean", required = false, default = false } },
-                { header_name = { type = "string", required = false, len_min = 1 } },
-                { query_param_name = { type = "string", required = false, len_min = 1 } },
-              },
-              entity_checks = {
-                { at_least_one_of = { "sni", "header_name", "query_param_name" } },
-              },
-            }
-          },
-          -- Endpoint policy selectors.
-          { endpoint = {
-              type = "record",
-              required = false,
-              fields = {
-                { sni = { type = "boolean", required = false, default = false } },
-                { header_name = { type = "string", required = false, len_min = 1 } },
-                { query_param_name = { type = "string", required = false, len_min = 1 } },
-              },
-              entity_checks = {
-                { at_least_one_of = { "sni", "header_name", "query_param_name" } },
-              },
-            }
-          },
+          -- Selector fields in this plugin instance.
+          { sni = { type = "boolean", required = false, default = false } },
+          { header_name = { type = "string", required = false, len_min = 1 } },
+          { query_param_name = { type = "string", required = false, len_min = 1 } },
           -- Header name used when forwarding resolved client_id upstream.
           { client_id_header_name = {
               type = "string",
               required = true,
               default = "X-Client-Id",
-            }
-          },
-          { introspection_header_name = {
-              type = "string",
-              required = false,
-              default = "X-Kong-Introspection-Response",
             }
           },
         },
