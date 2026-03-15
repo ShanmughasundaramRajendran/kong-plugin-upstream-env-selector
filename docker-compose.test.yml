@@ -1,4 +1,0 @@
-services:
-  kong:
-    environment:
-      KONG_DECLARATIVE_CONFIG: /kong/config/kong.test.yml
