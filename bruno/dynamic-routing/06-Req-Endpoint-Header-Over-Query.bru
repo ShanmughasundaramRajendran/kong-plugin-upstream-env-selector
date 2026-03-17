@@ -1,18 +1,22 @@
 meta {
-  name: 06-Req-Explicit X-Client-Id Ignored
+  name: 06-Req-Endpoint Header Over Query
   type: http
   seq: 6
 }
 
 get {
-  url: {{base_url}}/private/684130/developer-platform/gateway/clients
+  url: {{base_url}}/private/684130/developer-platform/gateway/clients?epUpsByQP=dev
   body: none
   auth: none
 }
 
+params:query {
+  epUpsByQP: dev
+}
+
 headers {
   Accept: application/json
-  X-Client-Id: perf_client
+  X-Upstream-Env-EP: qa
   Authorization: Bearer {{jwt_neutral_client}}
 }
 
@@ -21,13 +25,13 @@ tests {
     expect(res.getStatus()).to.equal(200);
   });
   
-  test("routes to it", function() {
+  test("routes to qa", function() {
     const body = JSON.parse(res.getBody());
-    expect(body.environment.ECHO_RESPONSE).to.equal("it");
+    expect(body.environment.ECHO_RESPONSE).to.equal("qa");
   });
 }
 
 docs {
-  Inbound X-Client-Id is not used for routing decisions.
-  Expected backend: it (service default).
+  Endpoint policy header (X-Upstream-Env-EP) should win over endpoint query epUpsByQP.
+  Expected backend: qa.
 }

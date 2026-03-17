@@ -6,7 +6,9 @@ return {
   -- - name: dynamic-routing
   name = "dynamic-routing",
   fields = {
-    -- Scope: can be applied globally, per-service, per-route, or per consumer+route.
+    -- Scope: can be applied globally, per-service, or per-route.
+    -- It is intentionally not valid as a consumer-scoped plugin.
+    { consumer = typedefs.no_consumer },
     { protocols = typedefs.protocols_http },
     { config = {
         type = "record",
@@ -22,10 +24,34 @@ return {
           },
           -- Highest-priority request header.
           { upstream_header_name = { type = "string", required = true, default = "X-Upstream-Env" } },
-          -- Selector fields in this plugin instance.
-          { sni = { type = "boolean", required = false, default = false } },
-          { header_name = { type = "string", required = false, len_min = 1 } },
-          { query_param_name = { type = "string", required = false, len_min = 1 } },
+          -- Access policy selectors (evaluated before endpoint selectors).
+          { access_policy = {
+              type = "record",
+              required = false,
+              fields = {
+                { sni = { type = "boolean", required = false, default = false } },
+                { header_name = { type = "string", required = false, len_min = 1 } },
+                { query_param_name = { type = "string", required = false, len_min = 1 } },
+              },
+              entity_checks = {
+                { at_least_one_of = { "sni", "header_name", "query_param_name" } },
+              },
+            }
+          },
+          -- Endpoint policy selectors.
+          { endpoint = {
+              type = "record",
+              required = false,
+              fields = {
+                { sni = { type = "boolean", required = false, default = false } },
+                { header_name = { type = "string", required = false, len_min = 1 } },
+                { query_param_name = { type = "string", required = false, len_min = 1 } },
+              },
+              entity_checks = {
+                { at_least_one_of = { "sni", "header_name", "query_param_name" } },
+              },
+            }
+          },
         },
       }
     },

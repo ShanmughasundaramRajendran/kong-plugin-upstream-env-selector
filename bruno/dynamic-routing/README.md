@@ -19,10 +19,10 @@ This collection validates core upstream selection behavior for the `dynamic-rout
 |---|---|---|---|
 | 01 | `01-Req-Default-Route-No-Selectors.bru` | No selector values | `it` |
 | 02 | `02-Req-Default-Header-To-Dev.bru` | Default header `X-Upstream-Env=dev` | `dev` |
-| 03 | `03-Req-Default-Header-Overrides-All.bru` | Default header precedence over selector header/query | `qa` |
-| 04 | `04-Req-Access-Header-Over-Query.bru` | Selector header `X-Upstream-Selector` over query `upsByQP` | `qa` |
-| 05 | `05-Req-Access-Query-Over-Endpoint-Header.bru` | Selector query `upsByQP` fallback | `dev` |
-| 06 | `06-Req-Endpoint-Header-Over-Query.bru` | Inbound `X-Client-Id` ignored for routing | `it` |
+| 03 | `03-Req-Default-Header-Overrides-All.bru` | Default header precedence over access/endpoint selectors | `qa` |
+| 04 | `04-Req-Access-Header-Over-Query.bru` | Access policy header `X-Upstream-Env-AP` over query `apUpsByQP` | `qa` |
+| 05 | `05-Req-Access-Query-Over-Endpoint-Header.bru` | Access policy query `apUpsByQP` over endpoint header `X-Upstream-Env-EP` | `dev` |
+| 06 | `06-Req-Endpoint-Header-Over-Query.bru` | Endpoint policy header `X-Upstream-Env-EP` over query `epUpsByQP` | `qa` |
 | 07 | `07-Req-Endpoint-Query-To-Dev.bru` | SNI selector routing (`access-sni-dev.local`) | `dev` |
 
 ## Route Shape Used In This Suite
@@ -33,3 +33,4 @@ This collection validates core upstream selection behavior for the `dynamic-rout
 
 - Each request contains Bruno `tests` for status `200` and backend assertion.
 - If expected backend does not match, verify Kong is up and the `local` environment is selected.
+- Client-id fallback uses authenticated `consumer.username` and forwards it upstream as `client_id`.

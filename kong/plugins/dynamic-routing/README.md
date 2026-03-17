@@ -1,126 +1,79 @@
 # dynamic-routing (Kong)
 
-Request-driven upstream selection plugin for Kong.
+Request-driven upstream selection plugin for Kong Gateway.
 
-Repository-level setup and commands:
-`/README.md`
+## What It Does
 
-## Overview
+The plugin selects a Kong upstream at request time by mapping selector values from request context to `config.upstreams`.
 
-This plugin overrides which upstream a request is routed to by mapping request-derived selector values to upstream names in `config.upstreams`.
+When a selector value matches a key in `config.upstreams`, the plugin routes with `kong.service.set_upstream(...)`.
 
-Use this when one Kong route/service must fan out traffic to multiple backend environments (for example `dev`, `qa`, `prod`) based on request context such as headers, query params, TLS SNI, and authenticated consumer identity.
+If no selector matches, Kong continues with the service default upstream.
 
 ## Scope
 
-This plugin can be configured at:
+The plugin can be applied at:
 
-- global level
-- service level
-- route level
-- consumer level
-- consumer + route level
+- global
+- service
+- route
 
-## How It Works
+## Request-Time Behavior
 
-For each request in the `access` phase:
+Runs in `access` phase and evaluates selectors in strict order:
 
-1. The plugin evaluates selectors in strict priority order.
-2. For each selector, it extracts a value from the request context.
-3. It checks whether that value exists as a key in `config.upstreams`.
-4. On first match, it calls `kong.service.set_upstream(<mapped_upstream_name>)`.
-5. It stores selector metadata in `kong.ctx.plugin`:
-   - `upstream_backend_id`
-   - `upstream_selector_reason`
-   - `upstream_selector_key`
-6. If no selector matches, the plugin does not block the request and Kong keeps the service default upstream.
+1. `upstream_header_name` (default `X-Upstream-Env`)
+2. `access_policy` selectors (`sni -> header_name -> query_param_name`)
+3. `endpoint` selectors (`sni -> header_name -> query_param_name`)
+4. authenticated `consumer.username` fallback (forwarded as `client_id`)
 
-### Routing Priority
+On first match, routing is updated and evaluation stops.
 
-The plugin evaluates selectors in this exact order:
+## Configuration
 
-1. `upstream_header_name` (default: `X-Upstream-Env`)
-2. `sni`
-3. `header_name`
-4. `query_param_name`
-5. authenticated `consumer.username` (forwarded upstream as `X-Client-Id`)
+All fields are under `plugins[].config`.
 
-## Plugin Config Reference
+- `upstreams` (`map<string,string>`, required)
+  - selector key -> Kong upstream name
+- `upstream_header_name` (`string`, required, default `X-Upstream-Env`)
+  - highest-priority header selector
+- `access_policy` (`record`, optional)
+  - selectors: `sni`, `header_name`, `query_param_name`
+- `endpoint` (`record`, optional)
+  - selectors: `sni`, `header_name`, `query_param_name`
+  - header used when forwarding resolved consumer username
 
-All fields below are under `plugins[].config` in `schema.lua`:
-
-- `upstreams`:
-  - Type: `map<string,string>`
-  - Required: `true`
-  - Constraint: at least one entry (`len_min = 1`)
-  - Purpose: selector key -> Kong upstream name
-- `upstream_header_name`:
-  - Type: `string`
-  - Required: `true`
-  - Default: `X-Upstream-Env`
-  - Purpose: highest-priority request header selector
-- `sni`:
-  - Type: `boolean`
-  - Required: `false`
-  - Default: `false`
-  - Purpose: when enabled, attempt routing by TLS SNI after `upstream_header_name`
-- `header_name`:
-  - Type: `string`
-  - Required: `false`
-  - Constraint: non-empty when set
-  - Purpose: secondary request header selector
-- `query_param_name`:
-  - Type: `string`
-  - Required: `false`
-  - Constraint: non-empty when set
-  - Purpose: request query selector
-
-## Selector Matching Details
-
-Given:
-
-```yaml
-upstreams:
-  dev: orders-api-dev-upstream
-  qa: orders-api-qa-upstream
-  prod: orders-api-prod-upstream
-  qa-client-app: orders-api-qa-upstream
-```
-
-Matching behavior:
-
-1. If request header `X-Upstream-Env: dev` is present and `dev` is a key in `upstreams`, route to `orders-api-dev-upstream`.
-2. Else, if `sni = true` and TLS SNI is `qa` and `qa` exists in `upstreams`, route to `orders-api-qa-upstream`.
-3. Else, if `header_name = X-Upstream-Selector` and that header value is `prod`, route to `orders-api-prod-upstream`.
-4. Else, if `query_param_name = upsByQP` and query value is `qa`, route to `orders-api-qa-upstream`.
-5. Else, if authenticated consumer exists and `consumer.username = qa-client-app`, route to `orders-api-qa-upstream`.
-6. Else, use service default upstream.
-
-To model separate endpoint/access-policy behavior, create separate plugin instances with different Kong scopes and selector config (for example `route` for endpoint behavior, `consumer+route` for access-policy behavior). Kong plugin precedence determines which instance applies to a request.
-
-## Config Shape
+## Example
 
 ```yaml
 plugins:
 - name: dynamic-routing
-  service: my-service
+  service: orders-service
   config:
     upstream_header_name: X-Upstream-Env
-    sni: true
-    header_name: X-Upstream-Selector
-    query_param_name: upsByQP
     upstreams:
-      dev: my-svc-dev-upstream
-      qa: my-svc-qa-upstream
-      prod: my-svc-prod-upstream
-      qa-client-app: my-svc-qa-upstream
+      dev: orders-api-dev-upstream
+      qa: orders-api-qa-upstream
+      prod: orders-api-prod-upstream
+      qa-client-app: orders-api-qa-upstream
+    access_policy:
+      sni: true
+      header_name: X-Upstream-Env-AP
+      query_param_name: apUpsByQP
+    endpoint:
+      sni: true
+      header_name: X-Upstream-Env-EP
+      query_param_name: epUpsByQP
 ```
 
-For client-id based routing, ensure your auth plugin resolves an authenticated consumer so `kong.client.get_consumer().username` is available in `access` phase.
+## Observability
 
-## Unit Tests
+When an upstream is selected, the plugin stores decision metadata in `kong.ctx.plugin`:
 
-```bash
-pongo up
-make test
-```
+- `upstream_backend_id`
+- `upstream_selector_reason`
+- `upstream_selector_key`
+
+## Reference
+
+Repository-level setup and local run instructions are in `/README.md`.

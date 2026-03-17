@@ -137,7 +137,7 @@ Input request:
 - no `X-Upstream-Env`
 - `X-Upstream-Env-AP: unknown`
 - `X-Upstream-Env-EP: qa`
-- no `X-Client-Id`
+- no `client_id`
 
 Execution:
 

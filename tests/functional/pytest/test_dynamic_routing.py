@@ -24,40 +24,41 @@ class TestDynamicRouting:
         headers = {
             **default_headers,
             "X-Upstream-Env": "qa",
-            "X-Upstream-Selector": "prod",
+            "X-Upstream-Env-AP": "prod",
+            "X-Upstream-Env-EP": "dev",
         }
         response = requests.get(
             f"{base_url}{route_path}",
             headers=headers,
-            params={"upsByQP": "dev"},
+            params={"apUpsByQP": "dev", "epUpsByQP": "prod"},
             timeout=10,
         )
         assert response.status_code == 200
         assert _get_environment_value(response) == "qa"
 
-    def test_selector_header_before_query(self, base_url, route_path, default_headers):
-        headers = {**default_headers, "X-Upstream-Selector": "prod"}
+    def test_access_policy_header_before_query(self, base_url, route_path, default_headers):
+        headers = {**default_headers, "X-Upstream-Env-AP": "prod"}
         response = requests.get(
             f"{base_url}{route_path}",
             headers=headers,
-            params={"upsByQP": "dev"},
+            params={"apUpsByQP": "dev"},
             timeout=10,
         )
         assert response.status_code == 200
         assert _get_environment_value(response) == "prod"
 
-    def test_selector_query_fallback(self, base_url, route_path, default_headers):
+    def test_endpoint_policy_query_fallback(self, base_url, route_path, default_headers):
         response = requests.get(
             f"{base_url}{route_path}",
             headers=default_headers,
-            params={"upsByQP": "dev"},
+            params={"epUpsByQP": "dev"},
             timeout=10,
         )
         assert response.status_code == 200
         assert _get_environment_value(response) == "dev"
 
     def test_explicit_x_client_id_is_ignored(self, base_url, route_path, default_headers):
-        headers = {**default_headers, "X-Client-Id": "perf_client"}
+        headers = {**default_headers, "client_id": "perf_client"}
         response = requests.get(f"{base_url}{route_path}", headers=headers, timeout=10)
         assert response.status_code == 200
         assert _get_environment_value(response) == "it"

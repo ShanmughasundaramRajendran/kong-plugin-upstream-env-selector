@@ -101,7 +101,7 @@ Important behavior:
 ## 7. Client identity fallback chain
 
 When selectors do not match, the plugin resolves `client_id` from authenticated `consumer.username`.
-If a client id value is resolved, the plugin sets it on upstream request header `X-Client-Id`.
+If a client id value is resolved, the plugin sets it on upstream request header `client_id`.
 
 ## 8. What gets written for observability
 
@@ -126,7 +126,7 @@ if match selectors in order sni/header/query:
 
 client_id = from consumer.username
 if client_id exists:
-  add/overwrite X-Client-Id to upstream request
+  add/overwrite client_id to upstream request
   if cfg.upstreams[client_id] exists:
     set_upstream and return
 

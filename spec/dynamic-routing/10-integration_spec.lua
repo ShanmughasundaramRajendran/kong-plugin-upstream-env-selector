@@ -31,7 +31,7 @@ describe("dynamic-routing (integration)", function()
       end
 
       local body = backend_name
-      local received_client_id = headers["x-client-id"] or ""
+      local received_client_id = headers["client_id"] or ""
       local resp = "HTTP/1.1 200 OK\r\n"
         .. "Content-Type: text/plain\r\n"
         .. "Content-Length: " .. #body .. "\r\n"
@@ -123,15 +123,22 @@ describe("dynamic-routing (integration)", function()
       service = { name = "orders-gateway-service-int-" .. suffix },
       config = {
         upstream_header_name = "X-Upstream-Env",
-        sni = false,
-        header_name = "X-Upstream-Selector",
-        query_param_name = "upsByQP",
         upstreams = {
           dev = fixture.upstreams.dev,
           prod = fixture.upstreams.prod,
           qa = fixture.upstreams.qa,
           it = fixture.upstreams.it,
           ["qa-client-app"] = fixture.upstreams.qa,
+        },
+        access_policy = {
+          sni = false,
+          header_name = "X-Upstream-Env-AP",
+          query_param_name = "apUpsByQP",
+        },
+        endpoint = {
+          sni = false,
+          header_name = "X-Upstream-Env-EP",
+          query_param_name = "epUpsByQP",
         },
       },
     })
@@ -163,21 +170,26 @@ describe("dynamic-routing (integration)", function()
     request_and_assert("qa", {
       headers = {
         ["X-Upstream-Env"] = "qa",
-        ["X-Upstream-Selector"] = "dev",
+        ["X-Upstream-Env-AP"] = "dev",
+        ["X-Upstream-Env-EP"] = "prod",
       },
-      query = "upsByQP=prod",
+      query = "apUpsByQP=prod&epUpsByQP=dev",
     })
   end)
 
-  it("uses selector header before selector query", function()
+  it("uses access-policy header before access-policy query", function()
     request_and_assert("prod", {
-      headers = { ["X-Upstream-Selector"] = "prod" },
-      query = "upsByQP=dev",
+      headers = { ["X-Upstream-Env-AP"] = "prod" },
+      query = "apUpsByQP=dev",
     })
   end)
 
-  it("uses selector query when selector header is absent", function()
-    request_and_assert("dev", { query = "upsByQP=dev" })
+  it("uses endpoint header when access-policy does not match", function()
+    request_and_assert("qa", { headers = { ["X-Upstream-Env-EP"] = "qa" } })
+  end)
+
+  it("uses endpoint query when access-policy is absent", function()
+    request_and_assert("dev", { query = "epUpsByQP=dev" })
   end)
 
 end)

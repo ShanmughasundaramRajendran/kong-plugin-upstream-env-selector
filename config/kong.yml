@@ -40,12 +40,9 @@ upstreams:
 
 plugins:
 - name: dynamic-routing
-  route: orders-api-main-route
+  service: orders-gateway-service
   config:
     upstream_header_name: X-Upstream-Env
-    sni: true
-    header_name: X-Upstream-Selector
-    query_param_name: upsByQP
     upstreams:
       dev: orders-api-dev-upstream
       prod: orders-api-prod-upstream
@@ -64,57 +61,14 @@ plugins:
       neutral-client-app: orders-api-it-upstream
       access-sni-dev.local: orders-api-dev-upstream
       endpoint-sni-qa.local: orders-api-qa-upstream
-- name: dynamic-routing
-  route: orders-api-endpoint-sni-route
-  config:
-    upstream_header_name: X-Upstream-Env
-    sni: true
-    header_name: X-Upstream-Selector
-    query_param_name: upsByQP
-    upstreams:
-      dev: orders-api-dev-upstream
-      prod: orders-api-prod-upstream
-      qa: orders-api-qa-upstream
-      it: orders-api-it-upstream
-      dev_client: orders-api-dev-upstream
-      prod_client: orders-api-prod-upstream
-      qa_client: orders-api-qa-upstream
-      it_client: orders-api-it-upstream
-      perf_client: orders-api-perf-upstream
-      dev-client-app: orders-api-dev-upstream
-      prod-client-app: orders-api-prod-upstream
-      qa-client-app: orders-api-qa-upstream
-      it-client-app: orders-api-it-upstream
-      perf-client-app: orders-api-perf-upstream
-      neutral-client-app: orders-api-it-upstream
-      access-sni-dev.local: orders-api-dev-upstream
-      endpoint-sni-qa.local: orders-api-qa-upstream
-- name: dynamic-routing
-  route: orders-api-main-route
-  consumer: qa-client-app
-  config:
-    upstream_header_name: X-Upstream-Env
-    sni: true
-    header_name: X-Upstream-Selector
-    query_param_name: upsByQP
-    upstreams:
-      dev: orders-api-dev-upstream
-      prod: orders-api-prod-upstream
-      qa: orders-api-qa-upstream
-      it: orders-api-it-upstream
-      dev_client: orders-api-dev-upstream
-      prod_client: orders-api-prod-upstream
-      qa_client: orders-api-qa-upstream
-      it_client: orders-api-it-upstream
-      perf_client: orders-api-perf-upstream
-      dev-client-app: orders-api-dev-upstream
-      prod-client-app: orders-api-prod-upstream
-      qa-client-app: orders-api-qa-upstream
-      it-client-app: orders-api-it-upstream
-      perf-client-app: orders-api-perf-upstream
-      neutral-client-app: orders-api-it-upstream
-      access-sni-dev.local: orders-api-dev-upstream
-      endpoint-sni-qa.local: orders-api-qa-upstream
+    access_policy:
+      sni: true
+      header_name: X-Upstream-Env-AP
+      query_param_name: apUpsByQP
+    endpoint:
+      sni: true
+      header_name: X-Upstream-Env-EP
+      query_param_name: epUpsByQP
 
 consumers:
 - username: dev-client-app

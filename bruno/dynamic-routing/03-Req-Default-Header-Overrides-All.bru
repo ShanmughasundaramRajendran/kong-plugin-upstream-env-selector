@@ -16,9 +16,9 @@ params:query {
 
 headers {
   Accept: application/json
-  X-Upstream-Selector: prod
+  X-Upstream-Env-Policy: dev
   Authorization: Bearer {{jwt_neutral_client}}
-  X-Upstream-Env: qa
+  ~X-Upstream-Env: qa
 }
 
 tests {
