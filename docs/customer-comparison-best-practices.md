@@ -73,7 +73,7 @@ flowchart TD
     - `endpoint_sni`, `endpoint_header`, `endpoint_query`.
 - `set_upstream(...)`:
   - calls `kong.service.set_upstream(upstream_name)`
-  - stores observability metadata in `kong.ctx.shared`:
+  - stores observability metadata in `kong.ctx.plugin`:
     - `upstream_backend_id`
     - `upstream_selector_reason`
     - `upstream_selector_key`.
@@ -145,7 +145,7 @@ Execution:
 2. Access policy SNI/header/query do not produce mapped key (`unknown`).
 3. Endpoint header matches key `qa`.
 4. Plugin calls `kong.service.set_upstream(<qa upstream>)`.
-5. `kong.ctx.shared` is set with:
+5. `kong.ctx.plugin` is set with:
    - `upstream_selector_reason=endpoint_header`
    - `upstream_selector_key=qa`.
 

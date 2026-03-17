@@ -29,7 +29,7 @@ For each request in the `access` phase:
 2. For each selector, it extracts a value from the request context.
 3. It checks whether that value exists as a key in `config.upstreams`.
 4. On first match, it calls `kong.service.set_upstream(<mapped_upstream_name>)`.
-5. It stores selector metadata in `kong.ctx.shared`:
+5. It stores selector metadata in `kong.ctx.plugin`:
    - `upstream_backend_id`
    - `upstream_selector_reason`
    - `upstream_selector_key`

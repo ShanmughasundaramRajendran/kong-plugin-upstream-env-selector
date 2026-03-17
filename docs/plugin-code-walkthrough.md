@@ -59,7 +59,7 @@ flowchart TD
     L --> N
 
     Z --> O[kong.service.set_upstream(mapped_upstream)]
-    O --> P[Store debug metadata in kong.ctx.shared]
+    O --> P[Store debug metadata in kong.ctx.plugin]
 ```
 
 ### Sequence representation
@@ -76,7 +76,7 @@ sequenceDiagram
     DR->>DR: Evaluate selector precedence
     alt Selector matched
       DR->>Kong: kong.service.set_upstream(name)
-      DR->>Kong: set ctx.shared reason/key/backend_id
+      DR->>Kong: set ctx.plugin reason/key/backend_id
     else No selector matched
       DR-->>Kong: no override
     end
@@ -107,9 +107,9 @@ If a client id value is resolved, the plugin sets it on upstream request header 
 
 On successful upstream override, the plugin stores:
 
-- `kong.ctx.shared.upstream_backend_id` -> mapped upstream name
-- `kong.ctx.shared.upstream_selector_reason` -> reason such as `default_header`, `sni`, `header`, `query`, `client_id`
-- `kong.ctx.shared.upstream_selector_key` -> matched selector key (for example `dev`, `qa_client`)
+- `kong.ctx.plugin.upstream_backend_id` -> mapped upstream name
+- `kong.ctx.plugin.upstream_selector_reason` -> reason such as `default_header`, `sni`, `header`, `query`, `client_id`
+- `kong.ctx.plugin.upstream_selector_key` -> matched selector key (for example `dev`, `qa_client`)
 
 This helps trace exactly why a request was routed to a specific backend.
 
@@ -161,4 +161,4 @@ So one request can be routed by:
 2. Confirm selector key exists in `config.upstreams` exactly.
 3. Confirm higher-priority selectors are not unintentionally set.
 4. Verify authenticated consumer context exists when expecting username-based fallback.
-5. Check `kong.ctx.shared` fields (or logs) for selector reason and key.
+5. Check `kong.ctx.plugin` fields (or logs) for selector reason and key.

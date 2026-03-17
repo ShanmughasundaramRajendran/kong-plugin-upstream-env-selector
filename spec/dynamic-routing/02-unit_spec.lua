@@ -30,7 +30,7 @@ describe("dynamic-routing (unit)", function()
         },
       },
       log = log_tbl,
-      ctx = { shared = {} },
+      ctx = { shared = {}, plugin = {} },
     }
 
     _G.ngx = stubs.ngx or { var = {} }
@@ -74,7 +74,7 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-dev", selected)
-    assert.equal("default_header", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("default_header", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("uses sni before header/query selectors", function()
@@ -92,7 +92,7 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("sni", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("sni", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("uses configured selector header when sni misses", function()
@@ -107,7 +107,7 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-prod", selected)
-    assert.equal("header", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("header", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("uses configured selector query when header misses", function()
@@ -122,7 +122,7 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("query", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("query", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("routes by consumer.username fallback", function()
@@ -137,7 +137,7 @@ describe("dynamic-routing (unit)", function()
 
     plugin:access(cfg)
     assert.equal("up-qa", selected)
-    assert.equal("client_id", kong.ctx.shared.upstream_selector_reason)
+    assert.equal("client_id", kong.ctx.plugin.upstream_selector_reason)
     assert.equal("qa-client-app", set_header_calls["X-Client-Id"])
   end)
 

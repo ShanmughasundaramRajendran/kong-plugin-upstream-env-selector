@@ -11,7 +11,7 @@ local _M = {
 -- Plugin lifecycle notes:
 -- `rewrite` phase: intentionally not implemented (no route mutation here).
 -- `access` phase: implemented below; selector precedence is applied here.
--- `log` phase: intentionally not implemented; selection metadata is already in `kong.ctx.shared`.
+-- `log` phase: intentionally not implemented; selection metadata is already in `kong.ctx.plugin`.
 
 local BY_SNI = "sni"
 local BY_HEADER = "header_name"
@@ -131,9 +131,9 @@ end
 
 local function set_upstream(upstream_name, reason, selector_key)
   kong.service.set_upstream(upstream_name)
-  kong.ctx.shared.upstream_backend_id = upstream_name
-  kong.ctx.shared.upstream_selector_reason = reason
-  kong.ctx.shared.upstream_selector_key = selector_key
+  kong.ctx.plugin.upstream_backend_id = upstream_name
+  kong.ctx.plugin.upstream_selector_reason = reason
+  kong.ctx.plugin.upstream_selector_key = selector_key
 end
 
 function _M:configure(configs)
@@ -214,7 +214,6 @@ function _M:access(cfg)
     end
   end
 
-  kong.log("No custom environments configured, using default/primary environment")
 end
 
 return _M
