@@ -4,9 +4,9 @@ Kong plugin for request-time upstream selection.
 
 ## What The Plugin Does
 
-`dynamic-routing` maps selector values from the incoming request context to upstream names defined in `config.upstreams`.
+`dynamic-routing` maps selector values from the incoming request context to backend targets defined in `config.upstreams`.
 
-When a selector matches, it calls `kong.service.set_upstream(...)` and routes to the mapped upstream.
+When a selector matches, it calls `kong.service.set_target(host, port)` and routes to the mapped backend target.
 If no selector matches, Kong continues with the service default upstream.
 
 ## Scope
@@ -32,7 +32,8 @@ Per request (`access` phase), evaluation order is:
 
 Defined in [schema.lua](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/kong/plugins/dynamic-routing/schema.lua):
 
-- `upstreams` (required map): selector key -> Kong upstream name
+- `upstreams` (required map): selector key -> backend host
+- `upstream_ports` (required map): selector key -> backend port (string, parsed to number)
 - `upstream_header_name` (required string, default `X-Upstream-Env`)
 - `access_policy` (optional record): `sni`, `header_name`, `query_param_name`
 - `endpoint` (optional record): `sni`, `header_name`, `query_param_name`

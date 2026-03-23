@@ -14,14 +14,14 @@ This document provides a code-level walkthrough of the plugin implementation, fo
 flowchart TD
     A[Request enters Kong route/service] --> B[dynamic-routing access phase]
     B --> C{Default header match?}
-    C -- yes --> Z[set_upstream and return]
+    C -- yes --> Z[set_target and return]
     C -- no --> D{Access policy match?<br/>sni -> header -> query}
     D -- yes --> Z
     D -- no --> E{Endpoint policy match?<br/>sni -> header -> query}
     E -- yes --> Z
     E -- no --> F{client_id chain match?}
     F -- yes --> Z
-    F -- no --> G[No override; keep service default upstream]
+    F -- no --> G[No override; keep service default target]
 ```
 
 ## Line-by-Line Walkthrough (`handler.lua`)
@@ -71,8 +71,8 @@ flowchart TD
   - returns `(upstream_name, selector_key, reason)` where reason is:
     - `access_policy_sni`, `access_policy_header`, `access_policy_query`
     - `endpoint_sni`, `endpoint_header`, `endpoint_query`.
-- `set_upstream(...)`:
-  - calls `kong.service.set_upstream(upstream_name)`
+- `set_target(...)`:
+  - calls `kong.service.set_target(host, port)`
   - stores observability metadata in `kong.ctx.plugin`:
     - `upstream_backend_id`
     - `upstream_selector_reason`
@@ -144,7 +144,7 @@ Execution:
 1. Default header check fails.
 2. Access policy SNI/header/query do not produce mapped key (`unknown`).
 3. Endpoint header matches key `qa`.
-4. Plugin calls `kong.service.set_upstream(<qa upstream>)`.
+4. Plugin calls `kong.service.set_target(<qa host>, <qa port>)`.
 5. `kong.ctx.plugin` is set with:
    - `upstream_selector_reason=endpoint_header`
    - `upstream_selector_key=qa`.
@@ -153,7 +153,7 @@ Execution:
 
 - Unit precedence and fallback checks:
   - `spec/dynamic-routing/02-unit_spec.lua`
-- Integration checks with live Kong upstream switching:
+- Integration checks with live Kong target switching:
   - `spec/dynamic-routing/10-integration_spec.lua`
 - Functional scenarios on local stack:
   - `tests/functional/pytest/test_dynamic_routing.py`

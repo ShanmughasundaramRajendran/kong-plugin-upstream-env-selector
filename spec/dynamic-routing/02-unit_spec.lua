@@ -3,6 +3,7 @@ local PLUGIN_MODULE = "kong.plugins.dynamic-routing.handler"
 describe("dynamic-routing (unit)", function()
   local cfg
   local set_header_calls
+  local set_target_calls
 
   local function stub_kong(stubs)
     local log_tbl = {
@@ -22,7 +23,9 @@ describe("dynamic-routing (unit)", function()
         get_consumer = stubs.get_consumer or function() return nil end,
       },
       service = {
-        set_upstream = stubs.set_upstream or function() end,
+        set_target = stubs.set_target or function(host, port)
+          table.insert(set_target_calls, { host = host, port = port })
+        end,
         request = {
           set_header = stubs.set_request_header or function(name, value)
             set_header_calls[name] = value
@@ -47,14 +50,23 @@ describe("dynamic-routing (unit)", function()
 
   before_each(function()
     set_header_calls = {}
+    set_target_calls = {}
     cfg = {
       upstreams = {
-        dev = "up-dev",
-        qa = "up-qa",
-        prod = "up-prod",
-        ["sni.example.com"] = "up-qa",
-        ["endpoint.sni.example.com"] = "up-prod",
-        ["qa-client-app"] = "up-qa",
+        dev = "orders_api_dev",
+        qa = "orders_api_qa",
+        prod = "orders_api_prod",
+        ["sni.example.com"] = "orders_api_qa",
+        ["endpoint.sni.example.com"] = "orders_api_prod",
+        ["qa-client-app"] = "orders_api_qa",
+      },
+      upstream_ports = {
+        dev = 8080,
+        qa = 8080,
+        prod = 8080,
+        ["sni.example.com"] = 8080,
+        ["endpoint.sni.example.com"] = 8080,
+        ["qa-client-app"] = 8080,
       },
       upstream_header_name = "X-Upstream-Env",
       access_policy = {
@@ -71,22 +83,19 @@ describe("dynamic-routing (unit)", function()
   end)
 
   it("uses default header first", function()
-    local selected
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Upstream-Env" then return "dev" end
         if name == "X-Upstream-Env-AP" then return "qa" end
       end,
-      set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-dev", selected)
+    assert.same({ host = "orders_api_dev", port = 8080 }, set_target_calls[1])
     assert.equal("default_header", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("uses access_policy sni before access_policy header/query", function()
-    local selected
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Upstream-Env-AP" then return "prod" end
@@ -95,87 +104,76 @@ describe("dynamic-routing (unit)", function()
         if name == "apUpsByQP" then return "dev" end
       end,
       ngx = { var = { ssl_server_name = "sni.example.com" } },
-      set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-qa", selected)
+    assert.same({ host = "orders_api_qa", port = 8080 }, set_target_calls[1])
     assert.equal("access_policy_sni", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("uses access_policy header when access_policy sni misses", function()
-    local selected
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Upstream-Env-AP" then return "prod" end
       end,
       ngx = { var = {} },
-      set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-prod", selected)
+    assert.same({ host = "orders_api_prod", port = 8080 }, set_target_calls[1])
     assert.equal("access_policy_header", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("uses access_policy query when access_policy header misses", function()
-    local selected
     local plugin = load_plugin({
       get_query_arg = function(name)
         if name == "apUpsByQP" then return "qa" end
       end,
       ngx = { var = {} },
-      set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-qa", selected)
+    assert.same({ host = "orders_api_qa", port = 8080 }, set_target_calls[1])
     assert.equal("access_policy_query", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("uses endpoint policy when access_policy does not match", function()
-    local selected
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Upstream-Env-EP" then return "prod" end
       end,
       ngx = { var = {} },
-      set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-prod", selected)
+    assert.same({ host = "orders_api_prod", port = 8080 }, set_target_calls[1])
     assert.equal("endpoint_header", kong.ctx.plugin.upstream_selector_reason)
   end)
 
   it("routes by consumer.username fallback", function()
-    local selected
     local plugin = load_plugin({
       get_consumer = function()
         return { username = "qa-client-app" }
       end,
       ngx = { var = {} },
-      set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.equal("up-qa", selected)
+    assert.same({ host = "orders_api_qa", port = 8080 }, set_target_calls[1])
     assert.equal("client_id", kong.ctx.plugin.upstream_selector_reason)
     assert.equal("qa-client-app", set_header_calls["client_id"])
   end)
 
   it("does not route from inbound client_id header", function()
-    local selected
     local plugin = load_plugin({
       get_header = function(name)
         if name == "client_id" then return "qa-client-app" end
       end,
       ngx = { var = {} },
-      set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.is_nil(selected)
+    assert.equal(0, #set_target_calls)
   end)
 
   it("does not fail when cfg is nil", function()
@@ -189,8 +187,13 @@ describe("dynamic-routing (unit)", function()
     assert.is_true(pcall(function() plugin:access(cfg) end))
   end)
 
+  it("does not fail when upstream_ports is not a table", function()
+    local plugin = load_plugin({ ngx = { var = {} } })
+    cfg.upstream_ports = "invalid"
+    assert.is_true(pcall(function() plugin:access(cfg) end))
+  end)
+
   it("ignores non-string selector return values", function()
-    local selected
     local plugin = load_plugin({
       get_header = function(name)
         if name == "X-Upstream-Env-AP" then return { "prod" } end
@@ -199,10 +202,9 @@ describe("dynamic-routing (unit)", function()
         if name == "apUpsByQP" then return { "qa" } end
       end,
       ngx = { var = {} },
-      set_upstream = function(u) selected = u end,
     })
 
     plugin:access(cfg)
-    assert.is_nil(selected)
+    assert.equal(0, #set_target_calls)
   end)
 end)

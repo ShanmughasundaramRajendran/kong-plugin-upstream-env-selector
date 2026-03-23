@@ -4,14 +4,14 @@ This document explains the end-to-end flow of the `dynamic-routing` Kong plugin 
 
 ## 1. What this plugin does
 
-The plugin picks a Kong upstream at request time using selector inputs from:
+The plugin picks a backend target at request time using selector inputs from:
 
 1. A default header (`X-Upstream-Env`)
 2. Access policy selectors (`sni`, header, query)
 3. Endpoint policy selectors (`sni`, header, query)
 4. Client identity fallback (`consumer.username`)
 
-If no selector maps to `config.upstreams`, the request is not blocked. Kong uses the service default upstream.
+If no selector maps to `config.upstreams`, the request is not blocked. Kong uses the service default target.
 
 ## 2. Where the logic lives
 
@@ -35,7 +35,8 @@ Reason: upstream selection must happen before proxying, and after auth where con
 
 From `schema.lua`, required and key fields are:
 
-- `config.upstreams` (required map): selector key -> Kong upstream name
+- `config.upstreams` (required map): selector key -> backend host
+- `config.upstream_ports` (required map): selector key -> backend port
 - `config.upstream_header_name` (default `X-Upstream-Env`)
 
 ## 5. End-to-end request flow
@@ -44,7 +45,7 @@ From `schema.lua`, required and key fields are:
 flowchart TD
     A[Incoming request] --> B[dynamic-routing access phase]
     B --> C{Default header matches?<br/>X-Upstream-Env -> upstreams[key]}
-    C -- yes --> Z[set_upstream and return]
+    C -- yes --> Z[set_target and return]
     C -- no --> D{Access policy match?<br/>sni -> header -> query}
     D -- yes --> Z
     D -- no --> E{Endpoint policy match?<br/>sni -> header -> query}
@@ -58,7 +59,7 @@ flowchart TD
     M -- no --> N[No override; keep service default route]
     L --> N
 
-    Z --> O[kong.service.set_upstream(mapped_upstream)]
+    Z --> O[kong.service.set_target(mapped_host, mapped_port)]
     O --> P[Store debug metadata in kong.ctx.plugin]
 ```
 
@@ -69,18 +70,18 @@ sequenceDiagram
     participant Client
     participant Kong
     participant DR as dynamic-routing
-    participant Up as Kong Upstream
+    participant Up as Upstream Target
 
     Client->>Kong: HTTP request
     Kong->>DR: access(cfg)
     DR->>DR: Evaluate selector precedence
     alt Selector matched
-      DR->>Kong: kong.service.set_upstream(name)
+      DR->>Kong: kong.service.set_target(host, port)
       DR->>Kong: set ctx.plugin reason/key/backend_id
     else No selector matched
       DR-->>Kong: no override
     end
-    Kong->>Up: Proxy request to selected/default upstream
+    Kong->>Up: Proxy request to selected/default target
     Up-->>Client: Response
 ```
 
@@ -107,7 +108,7 @@ If a client id value is resolved, the plugin sets it on upstream request header 
 
 On successful upstream override, the plugin stores:
 
-- `kong.ctx.plugin.upstream_backend_id` -> mapped upstream name
+- `kong.ctx.plugin.upstream_backend_id` -> mapped backend `host:port`
 - `kong.ctx.plugin.upstream_selector_reason` -> reason such as `default_header`, `sni`, `header`, `query`, `client_id`
 - `kong.ctx.plugin.upstream_selector_key` -> matched selector key (for example `dev`, `qa_client`)
 
@@ -119,40 +120,40 @@ This helps trace exactly why a request was routed to a specific backend.
 if cfg invalid or cfg.upstreams missing: return
 
 if match default header:
-  set_upstream and return
+  set_target and return
 
 if match selectors in order sni/header/query:
-  set_upstream and return
+  set_target and return
 
 client_id = from consumer.username
 if client_id exists:
   add/overwrite client_id to upstream request
   if cfg.upstreams[client_id] exists:
-    set_upstream and return
+    set_target and return
 
 log debug and keep service default routing
 ```
 
 ## 10. Concrete local example (`config/kong.yml`)
 
-- Service default host: `orders-api-it-upstream`
+- Service default host: `orders_api_it:8080`
 - If no selectors match, traffic stays on IT backend.
 - Example key mappings:
-  - `dev` -> `orders-api-dev-upstream`
-  - `qa_client` -> `orders-api-qa-upstream`
-  - `access-sni-dev.local` -> `orders-api-dev-upstream`
+  - `dev` -> `orders_api_dev:8080`
+  - `qa_client` -> `orders_api_qa:8080`
+  - `access-sni-dev.local` -> `orders_api_dev:8080`
 
 So one request can be routed by:
 - `X-Upstream-Env: dev`
-- or `X-Upstream-Selector: dev`
-- or `?upsByQP=dev`
+- or `X-Upstream-Env-AP: dev`
+- or `?apUpsByQP=dev`
 - or authenticated consumer username `qa-client-app`
 
 ## 11. Why this design is predictable
 
 - Deterministic precedence: first matching rule wins.
 - Non-breaking fallback: no match does not fail request.
-- Kong-native upstream switching: uses named upstreams (`kong.service.set_upstream`).
+- Kong-native target switching: uses `kong.service.set_target`.
 - Test-backed behavior: schema + unit + integration + functional suites validate precedence and fallback.
 
 ## 12. Quick debugging checklist

@@ -79,7 +79,7 @@ describe("dynamic-routing (integration)", function()
   end
 
   lazy_setup(function()
-    helpers.get_db_utils(nil, { "routes", "services", "plugins", "upstreams", "targets" }, { "dynamic-routing" })
+    helpers.get_db_utils(nil, { "routes", "services", "plugins" }, { "dynamic-routing" })
 
     assert(helpers.start_kong({ plugins = "bundled,dynamic-routing" }))
 
@@ -87,13 +87,6 @@ describe("dynamic-routing (integration)", function()
     local suffix = tostring(get_available_port())
 
     fixture.route_path = "/api/orders-int"
-    fixture.upstreams = {
-      dev = "orders-api-dev-upstream-int-" .. suffix,
-      prod = "orders-api-prod-upstream-int-" .. suffix,
-      qa = "orders-api-qa-upstream-int-" .. suffix,
-      it = "orders-api-it-upstream-int-" .. suffix,
-    }
-
     fixture.backends = {
       dev = { host = "127.0.0.1", port = get_available_port() },
       prod = { host = "127.0.0.1", port = get_available_port() },
@@ -101,16 +94,9 @@ describe("dynamic-routing (integration)", function()
       it = { host = "127.0.0.1", port = get_available_port() },
     }
 
-    for env, upstream_name in pairs(fixture.upstreams) do
-      post_json(admin, "/upstreams", { name = upstream_name })
-      post_json(admin, "/upstreams/" .. upstream_name .. "/targets", {
-        target = fixture.backends[env].host .. ":" .. fixture.backends[env].port,
-      })
-    end
-
     post_json(admin, "/services", {
       name = "orders-gateway-service-int-" .. suffix,
-      host = fixture.upstreams.it,
+      url = "http://" .. fixture.backends.it.host .. ":" .. fixture.backends.it.port,
     })
 
     post_json(admin, "/routes", {
@@ -124,11 +110,18 @@ describe("dynamic-routing (integration)", function()
       config = {
         upstream_header_name = "X-Upstream-Env",
         upstreams = {
-          dev = fixture.upstreams.dev,
-          prod = fixture.upstreams.prod,
-          qa = fixture.upstreams.qa,
-          it = fixture.upstreams.it,
-          ["qa-client-app"] = fixture.upstreams.qa,
+          dev = fixture.backends.dev.host,
+          prod = fixture.backends.prod.host,
+          qa = fixture.backends.qa.host,
+          it = fixture.backends.it.host,
+          ["qa-client-app"] = fixture.backends.qa.host,
+        },
+        upstream_ports = {
+          dev = tostring(fixture.backends.dev.port),
+          prod = tostring(fixture.backends.prod.port),
+          qa = tostring(fixture.backends.qa.port),
+          it = tostring(fixture.backends.it.port),
+          ["qa-client-app"] = tostring(fixture.backends.qa.port),
         },
         access_policy = {
           sni = false,

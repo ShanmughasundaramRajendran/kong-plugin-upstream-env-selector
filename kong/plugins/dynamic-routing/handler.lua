@@ -39,7 +39,25 @@ local function first_non_empty_string(value)
   return nil
 end
 
-local function get_upstream_by_sni(enabled, upstreams)
+local function get_target(upstreams, upstream_ports, selector_key)
+  local host = upstreams[selector_key]
+  local port = tonumber(upstream_ports[selector_key])
+
+  if not is_non_empty_string(host) then
+    return nil
+  end
+
+  if type(port) ~= "number" or port % 1 ~= 0 then
+    return nil
+  end
+
+  return {
+    host = host,
+    port = port,
+  }
+end
+
+local function get_target_by_sni(enabled, upstreams, upstream_ports)
   if not enabled then
     return nil
   end
@@ -49,15 +67,15 @@ local function get_upstream_by_sni(enabled, upstreams)
     return nil
   end
 
-  local upstream = upstreams[name]
-  if upstream then
-    return upstream, name
+  local target = get_target(upstreams, upstream_ports, name)
+  if target then
+    return target, name
   end
 
   return nil
 end
 
-local function get_upstream_by_header(header_name, upstreams)
+local function get_target_by_header(header_name, upstreams, upstream_ports)
   if not is_non_empty_string(header_name) then
     return nil
   end
@@ -67,15 +85,15 @@ local function get_upstream_by_header(header_name, upstreams)
     return nil
   end
 
-  local upstream = upstreams[env_name]
-  if upstream then
-    return upstream, env_name
+  local target = get_target(upstreams, upstream_ports, env_name)
+  if target then
+    return target, env_name
   end
 
   return nil
 end
 
-local function get_upstream_by_query_param(name, upstreams)
+local function get_target_by_query_param(name, upstreams, upstream_ports)
   if not is_non_empty_string(name) then
     return nil
   end
@@ -85,15 +103,15 @@ local function get_upstream_by_query_param(name, upstreams)
     return nil
   end
 
-  local upstream = upstreams[env_name]
-  if upstream then
-    return upstream, env_name
+  local target = get_target(upstreams, upstream_ports, env_name)
+  if target then
+    return target, env_name
   end
 
   return nil
 end
 
-local function resolve_policy_upstream(policy, upstreams, policy_name)
+local function resolve_policy_target(policy, upstreams, upstream_ports, policy_name)
   local policy_scope = policy_name == "access_policy" and "access policy" or "endpoint policy"
 
   if policy == nil then
@@ -105,91 +123,46 @@ local function resolve_policy_upstream(policy, upstreams, policy_name)
     return nil
   end
 
-  if not (policy[BY_SNI]
-    or is_non_empty_string(policy[BY_HEADER])
-    or is_non_empty_string(policy[BY_QPARAM_NAME])) then
-    kong.log(policy_name, " has no selectors configured")
-    return nil
-  end
-
-  local upstream, key = get_upstream_by_sni(policy[BY_SNI], upstreams)
-  if upstream then
+  local target, key = get_target_by_sni(policy[BY_SNI], upstreams, upstream_ports)
+  if target then
     kong.log(
-      "rerouting request to upstream ", upstream,
+      "rerouting request to target ", target.host, ":", target.port,
       " because ", policy_scope, " SNI selector matched value ", key,
       " (reason=", policy_name, "_sni)"
     )
-    return upstream, key, policy_name .. "_sni"
+    return target, key, policy_name .. "_sni"
   end
 
-  upstream, key = get_upstream_by_header(policy[BY_HEADER], upstreams)
-  if upstream then
+  target, key = get_target_by_header(policy[BY_HEADER], upstreams, upstream_ports)
+  if target then
     kong.log(
-      "rerouting request to upstream ", upstream,
+      "rerouting request to target ", target.host, ":", target.port,
       " because ", policy_scope, " header selector ", policy[BY_HEADER],
       " matched selector key ", key,
       " (reason=", policy_name, "_header)"
     )
-    return upstream, key, policy_name .. "_header"
+    return target, key, policy_name .. "_header"
   end
 
-  upstream, key = get_upstream_by_query_param(policy[BY_QPARAM_NAME], upstreams)
-  if upstream then
+  target, key = get_target_by_query_param(policy[BY_QPARAM_NAME], upstreams, upstream_ports)
+  if target then
     kong.log(
-      "rerouting request to upstream ", upstream,
+      "rerouting request to target ", target.host, ":", target.port,
       " because ", policy_scope, " query-param selector ", policy[BY_QPARAM_NAME],
       " matched selector key ", key,
       " (reason=", policy_name, "_query)"
     )
-    return upstream, key, policy_name .. "_query"
+    return target, key, policy_name .. "_query"
   end
 
   return nil
 end
 
-local function set_upstream(upstream_name, reason, selector_key)
-  kong.service.set_upstream(upstream_name)
-  kong.ctx.plugin.upstream_backend_id = upstream_name
+local function set_target(target, reason, selector_key)
+  kong.service.set_target(target.host, target.port)
+  kong.ctx.plugin.upstream_backend_id = target.host .. ":" .. target.port
   kong.ctx.plugin.upstream_selector_reason = reason
   kong.ctx.plugin.upstream_selector_key = selector_key
-end
-
-local function validate_policy_config(policy, policy_name)
-  if policy == nil then
-    return nil
-  end
-
-  if type(policy) ~= "table" then
-    return policy_name .. " must be a table"
-  end
-
-  if not (policy[BY_SNI]
-    or is_non_empty_string(policy[BY_HEADER])
-    or is_non_empty_string(policy[BY_QPARAM_NAME])) then
-    return policy_name .. " must configure at least one selector (sni/header_name/query_param_name)"
-  end
-
-  return nil
-end
-
-function _M:configure(configs)
-  if type(configs) ~= "table" then
-    return
-  end
-
-  for _, plugin_conf in ipairs(configs) do
-    local cfg = plugin_conf.config or plugin_conf
-    if type(cfg) == "table" then
-      local err = validate_policy_config(cfg.access_policy, "access_policy")
-      if not err then
-        err = validate_policy_config(cfg.endpoint, "endpoint")
-      end
-
-      if err then
-        error("invalid dynamic-routing plugin configuration: " .. err)
-      end
-    end
-  end
 end
 
 local function get_client_id()
@@ -216,28 +189,34 @@ function _M:access(cfg)
 
   local upstreams = cfg.upstreams
   if type(upstreams) ~= "table" then
-    kong.log("Missing upstream map")
+    kong.log("Missing upstream host map")
+    return
+  end
+
+  local upstream_ports = cfg.upstream_ports
+  if type(upstream_ports) ~= "table" then
+    kong.log("Missing upstream port map")
     return
   end
 
   local default_header_name = cfg.upstream_header_name or DEFAULT_UPSTREAM_HEADER_NAME
 
-  local upstream, key, reason = get_upstream_by_header(default_header_name, upstreams)
-  if upstream then
-    kong.log("upstream found using default header: ", upstream)
-    set_upstream(upstream, "default_header", key)
+  local target, key, reason = get_target_by_header(default_header_name, upstreams, upstream_ports)
+  if target then
+    kong.log("target found using default header: ", target.host, ":", target.port)
+    set_target(target, "default_header", key)
     return
   end
 
-  upstream, key, reason = resolve_policy_upstream(cfg.access_policy, upstreams, "access_policy")
-  if upstream then
-    set_upstream(upstream, reason, key)
+  target, key, reason = resolve_policy_target(cfg.access_policy, upstreams, upstream_ports, "access_policy")
+  if target then
+    set_target(target, reason, key)
     return
   end
 
-  upstream, key, reason = resolve_policy_upstream(cfg.endpoint, upstreams, "endpoint")
-  if upstream then
-    set_upstream(upstream, reason, key)
+  target, key, reason = resolve_policy_target(cfg.endpoint, upstreams, upstream_ports, "endpoint")
+  if target then
+    set_target(target, reason, key)
     return
   end
 
@@ -247,10 +226,10 @@ function _M:access(cfg)
       kong.service.request.set_header(CLIENT_ID_HEADER_NAME, client_id)
     end
 
-    upstream = upstreams[client_id]
-    if upstream then
-      kong.log("rerouting request to upstream ", upstream, " based on consumer.username ", client_id)
-      set_upstream(upstream, "client_id", client_id)
+    target = get_target(upstreams, upstream_ports, client_id)
+    if target then
+      kong.log("rerouting request to target ", target.host, ":", target.port, " based on consumer.username ", client_id)
+      set_target(target, "client_id", client_id)
       return
     end
   end

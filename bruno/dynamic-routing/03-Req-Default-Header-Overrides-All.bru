@@ -11,12 +11,14 @@ get {
 }
 
 params:query {
-  upsByQP: dev
+  apUpsByQP: dev
+  epUpsByQP: prod
 }
 
 headers {
   Accept: application/json
-  X-Upstream-Env-Policy: dev
+  X-Upstream-Env-AP: dev
+  X-Upstream-Env-EP: prod
   Authorization: Bearer {{jwt_neutral_client}}
   ~X-Upstream-Env: qa
 }

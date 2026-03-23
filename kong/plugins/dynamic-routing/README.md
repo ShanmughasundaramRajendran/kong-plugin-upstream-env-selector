@@ -4,9 +4,9 @@ Request-driven upstream selection plugin for Kong Gateway.
 
 ## What It Does
 
-The plugin selects a Kong upstream at request time by mapping selector values from request context to `config.upstreams`.
+The plugin selects a backend target at request time by mapping selector values from request context to `config.upstreams`.
 
-When a selector value matches a key in `config.upstreams`, the plugin routes with `kong.service.set_upstream(...)`.
+When a selector value matches a key in `config.upstreams`, the plugin routes with `kong.service.set_target(host, port)`.
 
 If no selector matches, Kong continues with the service default upstream.
 
@@ -33,8 +33,10 @@ On first match, routing is updated and evaluation stops.
 
 All fields are under `plugins[].config`.
 
-- `upstreams` (`map<string,string>`, required)
-  - selector key -> Kong upstream name
+- `upstreams` (`map<string, string>`, required)
+  - selector key -> backend host
+- `upstream_ports` (`map<string, string>`, required)
+  - selector key -> backend port
 - `upstream_header_name` (`string`, required, default `X-Upstream-Env`)
   - highest-priority header selector
 - `access_policy` (`record`, optional)
@@ -52,10 +54,15 @@ plugins:
   config:
     upstream_header_name: X-Upstream-Env
     upstreams:
-      dev: orders-api-dev-upstream
-      qa: orders-api-qa-upstream
-      prod: orders-api-prod-upstream
-      qa-client-app: orders-api-qa-upstream
+      dev: orders_api_dev
+      qa: orders_api_qa
+      prod: orders_api_prod
+      qa-client-app: orders_api_qa
+    upstream_ports:
+      dev: 8080
+      qa: 8080
+      prod: 8080
+      qa-client-app: 8080
     access_policy:
       sni: true
       header_name: X-Upstream-Env-AP

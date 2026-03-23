@@ -6,8 +6,8 @@ _transform: true
 
 services:
 - name: orders-gateway-service
-  host: orders-api-it-upstream
-  port: 80
+  host: orders_api_it
+  port: 8080
   protocol: http
   routes:
   - name: orders-api-main-route
@@ -21,46 +21,47 @@ services:
     paths:
     - /private/684130/developer-platform/gateway/clients-endpoint-sni
 
-upstreams:
-- name: orders-api-dev-upstream
-  targets:
-  - target: orders_api_dev:8080
-- name: orders-api-prod-upstream
-  targets:
-  - target: orders_api_prod:8080
-- name: orders-api-qa-upstream
-  targets:
-  - target: orders_api_qa:8080
-- name: orders-api-it-upstream
-  targets:
-  - target: orders_api_it:8080
-- name: orders-api-perf-upstream
-  targets:
-  - target: orders_api_perf:8080
-
 plugins:
 - name: dynamic-routing
   service: orders-gateway-service
   config:
     upstream_header_name: X-Upstream-Env
     upstreams:
-      dev: orders-api-dev-upstream
-      prod: orders-api-prod-upstream
-      qa: orders-api-qa-upstream
-      it: orders-api-it-upstream
-      dev_client: orders-api-dev-upstream
-      prod_client: orders-api-prod-upstream
-      qa_client: orders-api-qa-upstream
-      it_client: orders-api-it-upstream
-      perf_client: orders-api-perf-upstream
-      dev-client-app: orders-api-dev-upstream
-      prod-client-app: orders-api-prod-upstream
-      qa-client-app: orders-api-qa-upstream
-      it-client-app: orders-api-it-upstream
-      perf-client-app: orders-api-perf-upstream
-      neutral-client-app: orders-api-it-upstream
-      access-sni-dev.local: orders-api-dev-upstream
-      endpoint-sni-qa.local: orders-api-qa-upstream
+      dev: orders_api_dev
+      prod: orders_api_prod
+      qa: orders_api_qa
+      it: orders_api_it
+      dev_client: orders_api_dev
+      prod_client: orders_api_prod
+      qa_client: orders_api_qa
+      it_client: orders_api_it
+      perf_client: orders_api_perf
+      dev-client-app: orders_api_dev
+      prod-client-app: orders_api_prod
+      qa-client-app: orders_api_qa
+      it-client-app: orders_api_it
+      perf-client-app: orders_api_perf
+      neutral-client-app: orders_api_it
+      access-sni-dev.local: orders_api_dev
+      endpoint-sni-qa.local: orders_api_qa
+    upstream_ports:
+      dev: "8080"
+      prod: "8080"
+      qa: "8080"
+      it: "8080"
+      dev_client: "8080"
+      prod_client: "8080"
+      qa_client: "8080"
+      it_client: "8080"
+      perf_client: "8080"
+      dev-client-app: "8080"
+      prod-client-app: "8080"
+      qa-client-app: "8080"
+      it-client-app: "8080"
+      perf-client-app: "8080"
+      neutral-client-app: "8080"
+      access-sni-dev.local: "8080"
+      endpoint-sni-qa.local: "8080"
     access_policy:
       sni: true
       header_name: X-Upstream-Env-AP

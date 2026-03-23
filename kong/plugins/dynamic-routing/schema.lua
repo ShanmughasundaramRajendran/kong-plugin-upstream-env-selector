@@ -19,7 +19,15 @@ return {
               required = true,
               len_min = 1,
               keys = { type = "string" },
-              values = { type = "string" },
+              values = { type = "string", len_min = 1 },
+            }
+          },
+          { upstream_ports = {
+              type = "map",
+              required = true,
+              len_min = 1,
+              keys = { type = "string" },
+              values = { type = "string", len_min = 1 },
             }
           },
           -- Highest-priority request header.
@@ -33,9 +41,6 @@ return {
                 { header_name = { type = "string", required = false, len_min = 1 } },
                 { query_param_name = { type = "string", required = false, len_min = 1 } },
               },
-              entity_checks = {
-                { at_least_one_of = { "sni", "header_name", "query_param_name" } },
-              },
             }
           },
           -- Endpoint policy selectors.
@@ -46,9 +51,6 @@ return {
                 { sni = { type = "boolean", required = false, default = false } },
                 { header_name = { type = "string", required = false, len_min = 1 } },
                 { query_param_name = { type = "string", required = false, len_min = 1 } },
-              },
-              entity_checks = {
-                { at_least_one_of = { "sni", "header_name", "query_param_name" } },
               },
             }
           },
