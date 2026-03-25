@@ -1,159 +1,109 @@
-# Dynamic Routing Plugin: Code Walkthrough (Core Functionality)
+# Dynamic Routing: Customer Janus vs Our Kong Plugin
 
-This document provides a code-level walkthrough of the plugin implementation, focused on how request routing decisions are made end to end.
+This document compares the customer-provided Janus implementation with our Kong plugin implementation, and explains what we improved and why it adds value.
 
-## Scope
+## Sources Compared
 
-- Core runtime file: `kong/plugins/dynamic-routing/handler.lua`
-- Config contract: `kong/plugins/dynamic-routing/schema.lua`
-- Local runtime mapping example: `config/kong.yml`
+- Customer handler: `/Users/shanmughasundaramrajendran/Downloads/upstream-test-case/handler/handler.txt`
+- Customer schema: `/Users/shanmughasundaramrajendran/Downloads/upstream-test-case/handler/schema.txt`
+- Our handler: `kong/plugins/dynamic-routing/handler.lua`
+- Our schema: `kong/plugins/dynamic-routing/schema.lua`
 
-## High-Level Request Lifecycle
+## Executive Summary
 
-```mermaid
-flowchart TD
-    A[Request enters Kong route/service] --> B[dynamic-routing access phase]
-    B --> C{Default header match?}
-    C -- yes --> Z[set_target and return]
-    C -- no --> D{Access policy match?<br/>sni -> header -> query}
-    D -- yes --> Z
-    D -- no --> E{Endpoint policy match?<br/>sni -> header -> query}
-    E -- yes --> Z
-    E -- no --> F{client_id chain match?}
-    F -- yes --> Z
-    F -- no --> G[No override; keep service default target]
-```
+We preserved the customer intent (dynamic upstream selection by request context), but improved the implementation in ways that make behavior more deterministic, easier to operate, and safer to evolve:
 
-## Line-by-Line Walkthrough (`handler.lua`)
+1. Clear, explicit precedence with early exit.
+2. Stronger config contract and simpler upstream mapping (`host:port`).
+3. Better resilience against invalid/missing inputs.
+4. Better observability (`reason`, `key`, `backend_id` stored in plugin context).
+5. Better verification depth (schema, unit, integration, functional, Bruno scenarios).
 
-### 1) Module setup and constants
+## Detailed Comparison
 
-- Lines `1-3`: imports `kong`, `ngx`, and safe JSON parser `cjson.safe`.
-- Lines `5-11`: plugin metadata; `PRIORITY = 800` so this runs in `access` with intended ordering behind auth enrichment.
-- Lines `18-24`: selector/config constants:
-  - policy keys (`sni`, `header_name`, `query_param_name`)
-  - defaults for header names
-  - consumer tag prefix `upstream_env:`.
+| Area | Customer Janus Implementation | Our Kong Plugin Implementation | Value Added |
+|---|---|---|---|
+| Gateway runtime | Janus-specific APIs (`janus.*`) | Kong-native APIs (`kong.request`, `kong.service.set_target`) | First-class fit for Kong runtime and lifecycle. |
+| Selector precedence | Implemented, but spread across imperative flow | Explicit staged flow: default header -> access policy -> endpoint policy -> consumer username | Easier to reason about, audit, and debug. |
+| Upstream model | Pulls complex upstream object (`upstream.servers[1].host/port`) from endpoint metadata | Direct config mapping: `selector -> "host:port"` parsed at runtime | Simpler onboarding and lower config drift risk. |
+| Input validation | Basic config checks | Defensive checks for config shape and value types at each step | Fewer runtime surprises from malformed inputs. |
+| Policy validation | Combined validation gate in `validate_inputs` | Per-policy resolver gracefully skips invalid policy blocks without breaking others | Higher fault tolerance and partial-config safety. |
+| Multi-value safety | Default header supports list in Janus form | Utility helpers normalize and guard non-empty values | Cleaner handling of edge-case request payloads. |
+| Observability | Logs + shared upstream id | `kong.ctx.plugin` stores `upstream_backend_id`, `upstream_selector_reason`, `upstream_selector_key` | Better production debugging and root-cause analysis. |
+| Consumer fallback | `janus.client.get_authenticated_client_id()` | Authenticated `consumer.username` fallback, also propagated upstream as `client_id` header | Better downstream traceability of routed identity. |
+| Schema contract | Janus model definitions with generic fields | Kong schema with explicit plugin scope and typed config structure | Stronger platform alignment and validation clarity. |
+| Test strategy | Not bundled in customer snippet | Schema + unit + integration + functional + Bruno scenarios | Higher confidence and safer refactoring. |
 
-### 2) Utility helpers for safe value handling
+## Best Practices We Implemented
 
-- Lines `26-28`: `is_non_empty_string(v)` avoids blank or non-string values.
-- Lines `30-44`: `first_non_empty_string(value)`:
-  - returns value directly if valid string
-  - if table, returns first valid non-empty entry
-  - supports multi-value headers/query args safely.
+### 1) Deterministic Decision Flow
 
-### 3) Consumer fallback extraction
+- First-match-wins with strict ordering.
+- Each decision point returns immediately after selecting target.
+- No hidden fallback branches.
 
-- Lines `85-105`: `get_consumer_upstream_env(consumer)`:
-  - scans `consumer.tags`
-  - finds first tag prefix `upstream_env:`
-  - returns suffix (for example `qa` from `upstream_env:qa`).
+Why this matters:
+- Predictable behavior under mixed selector inputs.
+- Easier production incident triage.
 
-### 4) Upstream lookup primitives
+### 2) Single-Source Upstream Target (`host:port`)
 
-- Lines `107-122`: `get_upstream_by_names(names, upstreams)`:
-  - iterates candidate selector keys
-  - returns first mapping found in `cfg.upstreams`.
-- Lines `124-136`: lookup via default header (`X-Upstream-Env` by default).
-- Lines `138-154`: lookup via TLS SNI (`ngx.var.ssl_server_name`) when enabled.
-- Lines `156-168`: lookup via configured request header.
-- Lines `170-182`: lookup via configured query param.
+- `config.upstreams` now directly stores routable targets in `host:port`.
+- Parser supports standard host format and bracketed IPv6.
+- Invalid target formats fail safe (no override) instead of partial routing.
 
-### 5) Policy resolver and context tagging
+Why this matters:
+- Less config duplication.
+- Lower chance of host/port mismatch.
 
-- `resolve_policy_upstream(policy, upstreams, policy_name)`:
-  - validates each policy independently:
-    - if `policy` is `nil`, skip silently
-    - if `policy` is not a table, skip that policy with debug log
-    - if policy has no `sni/header/query` selector configured, skip that policy with debug log
-  - evaluates in strict order: `sni` -> `header` -> `query`
-  - returns `(upstream_name, selector_key, reason)` where reason is:
-    - `access_policy_sni`, `access_policy_header`, `access_policy_query`
-    - `endpoint_sni`, `endpoint_header`, `endpoint_query`.
-- `set_target(...)`:
-  - calls `kong.service.set_target(host, port)`
-  - stores observability metadata in `kong.ctx.plugin`:
-    - `upstream_backend_id`
-    - `upstream_selector_reason`
-    - `upstream_selector_key`.
+### 3) Graceful Degradation Instead of Hard Failure
 
-### 6) Client-id fallback chain
+- Missing/invalid config branches are logged and skipped safely.
+- Invalid policy block does not block other valid policy blocks.
+- If no match exists, request continues with service default upstream.
 
-- `get_client_id(cfg)` resolves from authenticated `consumer.username`.
+Why this matters:
+- Better reliability during phased rollout and partial config updates.
 
-### 7) Core execution path: `access(cfg)`
+### 4) First-Class Observability
 
-- Lines `272-282`: start of `access` phase; returns early if config is not a table.
-- Lines `284-288`: requires `cfg.upstreams` map; returns if missing.
-- Lines `290-297`: priority #1 default-header lookup.
-  - on match: sets upstream and exits.
-- next: evaluate `access_policy` first and `endpoint` second.
-  - each policy is self-validated inside `resolve_policy_upstream`
-  - invalid/empty one does not block the other
-  - each successful match sets upstream and exits.
-- Lines `314-327`: client-id chain fallback.
-  - resolves client-id
-  - writes client-id to upstream request header (`kong.service.request.set_header`)
-  - maps `upstreams[client_id]`; on match sets upstream and exits.
-- final fallback logs default-routing debug context and continues with service default upstream.
+On successful override we capture:
 
-## Exact Precedence Implemented
+- `upstream_backend_id` (`host:port`)
+- `upstream_selector_reason` (`default_header`, `access_policy_*`, `endpoint_*`, `client_id`)
+- `upstream_selector_key` (matched selector value)
 
-The plugin chooses the first successful match in this order:
+Why this matters:
+- Direct mapping from request to routing reason.
+- Faster mean-time-to-debug.
 
-1. `upstream_header_name` (default `X-Upstream-Env`)
-2. `access_policy.sni`
-3. `access_policy.header_name`
-4. `access_policy.query_param_name`
-5. `endpoint.sni`
-6. `endpoint.header_name`
-7. `endpoint.query_param_name`
-8. client-id chain:
-   - authenticated `consumer.username`
+### 5) Kong-Native Contract and Scope
 
-## How `schema.lua` enforces contract
+- Schema explicitly disables consumer-scoped application (`typedefs.no_consumer`).
+- HTTP protocol scoping is explicit.
+- Config shape is validated by Kong schema layer.
 
-In `kong/plugins/dynamic-routing/schema.lua`:
+Why this matters:
+- Avoids unsupported attachment patterns.
+- Keeps plugin usage aligned with intended runtime semantics.
 
-- Lines `15-20`: `config.upstreams` map is required.
-- Line `23`: `upstream_header_name` has default `X-Upstream-Env`.
-- Lines `25-44`: `access_policy` and `endpoint` records define optional `sni/header/query` selectors.
+### 6) Strong Verification Strategy
 
-## How local `kong.yml` maps real traffic
+Current verification layers:
 
-In `config/kong.yml`:
+1. Schema tests: `spec/dynamic-routing/01-schema_spec.lua`
+2. Unit tests: `spec/dynamic-routing/02-unit_spec.lua`
+3. Integration tests: `spec/dynamic-routing/10-integration_spec.lua`
+4. Functional pytest: `tests/functional/pytest/test_dynamic_routing.py`
+5. Bruno scenarios: `bruno/dynamic-routing/*.bru`
 
-- Lines `67-92`: plugin instance configuration:
-  - selector header names
-  - `upstreams` key-to-upstream map
-  - access and endpoint selector field names
-- Lines `94-142`: consumer identities and `upstream_env:*` tags support fallback routing.
+Why this matters:
+- Prevents regressions in precedence, fallback, and routing behavior.
+- Gives confidence for future enhancements.
 
-## End-to-End Example (Concrete)
+## Practical Outcome for Stakeholders
 
-Input request:
-
-- no `X-Upstream-Env`
-- `X-Upstream-Env-AP: unknown`
-- `X-Upstream-Env-EP: qa`
-- no `client_id`
-
-Execution:
-
-1. Default header check fails.
-2. Access policy SNI/header/query do not produce mapped key (`unknown`).
-3. Endpoint header matches key `qa`.
-4. Plugin calls `kong.service.set_target(<qa host>, <qa port>)`.
-5. `kong.ctx.plugin` is set with:
-   - `upstream_selector_reason=endpoint_header`
-   - `upstream_selector_key=qa`.
-
-## Test Evidence for Core Flow
-
-- Unit precedence and fallback checks:
-  - `spec/dynamic-routing/02-unit_spec.lua`
-- Integration checks with live Kong target switching:
-  - `spec/dynamic-routing/10-integration_spec.lua`
-- Functional scenarios on local stack:
-  - `tests/functional/pytest/test_dynamic_routing.py`
+- Easier to configure: fewer moving parts in upstream mapping.
+- Easier to operate: explicit selector reason and key in runtime context.
+- Easier to extend: modular policy resolver and test-backed behavior.
+- Easier to trust in production: deterministic and fail-safe routing decisions.

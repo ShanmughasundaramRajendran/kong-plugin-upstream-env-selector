@@ -33,7 +33,7 @@ Per request (`access` phase), evaluation order is:
 Defined in [schema.lua](/Users/shanmughasundaramrajendran/kong-plugin-upstream-env-selector/kong/plugins/dynamic-routing/schema.lua):
 
 - `upstreams` (required map): selector key -> backend host
-- `upstream_ports` (required map): selector key -> backend port (string, parsed to number)
+- `upstreams` values must be `host:port` (for example `orders_api_dev:8080`)
 - `upstream_header_name` (required string, default `X-Upstream-Env`)
 - `access_policy` (optional record): `sni`, `header_name`, `query_param_name`
 - `endpoint` (optional record): `sni`, `header_name`, `query_param_name`

@@ -110,18 +110,11 @@ describe("dynamic-routing (integration)", function()
       config = {
         upstream_header_name = "X-Upstream-Env",
         upstreams = {
-          dev = fixture.backends.dev.host,
-          prod = fixture.backends.prod.host,
-          qa = fixture.backends.qa.host,
-          it = fixture.backends.it.host,
-          ["qa-client-app"] = fixture.backends.qa.host,
-        },
-        upstream_ports = {
-          dev = tostring(fixture.backends.dev.port),
-          prod = tostring(fixture.backends.prod.port),
-          qa = tostring(fixture.backends.qa.port),
-          it = tostring(fixture.backends.it.port),
-          ["qa-client-app"] = tostring(fixture.backends.qa.port),
+          dev = fixture.backends.dev.host .. ":" .. fixture.backends.dev.port,
+          prod = fixture.backends.prod.host .. ":" .. fixture.backends.prod.port,
+          qa = fixture.backends.qa.host .. ":" .. fixture.backends.qa.port,
+          it = fixture.backends.it.host .. ":" .. fixture.backends.it.port,
+          ["qa-client-app"] = fixture.backends.qa.host .. ":" .. fixture.backends.qa.port,
         },
         access_policy = {
           sni = false,

@@ -53,20 +53,12 @@ describe("dynamic-routing (unit)", function()
     set_target_calls = {}
     cfg = {
       upstreams = {
-        dev = "orders_api_dev",
-        qa = "orders_api_qa",
-        prod = "orders_api_prod",
-        ["sni.example.com"] = "orders_api_qa",
-        ["endpoint.sni.example.com"] = "orders_api_prod",
-        ["qa-client-app"] = "orders_api_qa",
-      },
-      upstream_ports = {
-        dev = 8080,
-        qa = 8080,
-        prod = 8080,
-        ["sni.example.com"] = 8080,
-        ["endpoint.sni.example.com"] = 8080,
-        ["qa-client-app"] = 8080,
+        dev = "orders_api_dev:8080",
+        qa = "orders_api_qa:8080",
+        prod = "orders_api_prod:8080",
+        ["sni.example.com"] = "orders_api_qa:8080",
+        ["endpoint.sni.example.com"] = "orders_api_prod:8080",
+        ["qa-client-app"] = "orders_api_qa:8080",
       },
       upstream_header_name = "X-Upstream-Env",
       access_policy = {
@@ -184,12 +176,6 @@ describe("dynamic-routing (unit)", function()
   it("does not fail when upstreams is not a table", function()
     local plugin = load_plugin({ ngx = { var = {} } })
     cfg.upstreams = "invalid"
-    assert.is_true(pcall(function() plugin:access(cfg) end))
-  end)
-
-  it("does not fail when upstream_ports is not a table", function()
-    local plugin = load_plugin({ ngx = { var = {} } })
-    cfg.upstream_ports = "invalid"
     assert.is_true(pcall(function() plugin:access(cfg) end))
   end)
 

@@ -39,9 +39,28 @@ local function first_non_empty_string(value)
   return nil
 end
 
-local function get_target(upstreams, upstream_ports, selector_key)
-  local host = upstreams[selector_key]
-  local port = tonumber(upstream_ports[selector_key])
+local function parse_host_and_port(value)
+  if not is_non_empty_string(value) then
+    return nil, nil
+  end
+
+  -- Supports bracketed IPv6 host format like [::1]:8080.
+  local bracket_host, bracket_port = value:match("^%[(.-)%]:(%d+)$")
+  if is_non_empty_string(bracket_host) then
+    return bracket_host, tonumber(bracket_port)
+  end
+
+  -- Default host:port format. Greedy host capture keeps last ":" for port split.
+  local host, port = value:match("^(.*):(%d+)$")
+  if is_non_empty_string(host) then
+    return host, tonumber(port)
+  end
+
+  return value, nil
+end
+
+local function get_target(upstreams, selector_key)
+  local host, port = parse_host_and_port(upstreams[selector_key])
 
   if not is_non_empty_string(host) then
     return nil
@@ -57,7 +76,7 @@ local function get_target(upstreams, upstream_ports, selector_key)
   }
 end
 
-local function get_target_by_sni(enabled, upstreams, upstream_ports)
+local function get_target_by_sni(enabled, upstreams)
   if not enabled then
     return nil
   end
@@ -67,7 +86,7 @@ local function get_target_by_sni(enabled, upstreams, upstream_ports)
     return nil
   end
 
-  local target = get_target(upstreams, upstream_ports, name)
+  local target = get_target(upstreams, name)
   if target then
     return target, name
   end
@@ -75,7 +94,7 @@ local function get_target_by_sni(enabled, upstreams, upstream_ports)
   return nil
 end
 
-local function get_target_by_header(header_name, upstreams, upstream_ports)
+local function get_target_by_header(header_name, upstreams)
   if not is_non_empty_string(header_name) then
     return nil
   end
@@ -85,7 +104,7 @@ local function get_target_by_header(header_name, upstreams, upstream_ports)
     return nil
   end
 
-  local target = get_target(upstreams, upstream_ports, env_name)
+  local target = get_target(upstreams, env_name)
   if target then
     return target, env_name
   end
@@ -93,7 +112,7 @@ local function get_target_by_header(header_name, upstreams, upstream_ports)
   return nil
 end
 
-local function get_target_by_query_param(name, upstreams, upstream_ports)
+local function get_target_by_query_param(name, upstreams)
   if not is_non_empty_string(name) then
     return nil
   end
@@ -103,7 +122,7 @@ local function get_target_by_query_param(name, upstreams, upstream_ports)
     return nil
   end
 
-  local target = get_target(upstreams, upstream_ports, env_name)
+  local target = get_target(upstreams, env_name)
   if target then
     return target, env_name
   end
@@ -111,7 +130,7 @@ local function get_target_by_query_param(name, upstreams, upstream_ports)
   return nil
 end
 
-local function resolve_policy_target(policy, upstreams, upstream_ports, policy_name)
+local function resolve_policy_target(policy, upstreams, policy_name)
   local policy_scope = policy_name == "access_policy" and "access policy" or "endpoint policy"
 
   if policy == nil then
@@ -123,7 +142,7 @@ local function resolve_policy_target(policy, upstreams, upstream_ports, policy_n
     return nil
   end
 
-  local target, key = get_target_by_sni(policy[BY_SNI], upstreams, upstream_ports)
+  local target, key = get_target_by_sni(policy[BY_SNI], upstreams)
   if target then
     kong.log(
       "rerouting request to target ", target.host, ":", target.port,
@@ -133,7 +152,7 @@ local function resolve_policy_target(policy, upstreams, upstream_ports, policy_n
     return target, key, policy_name .. "_sni"
   end
 
-  target, key = get_target_by_header(policy[BY_HEADER], upstreams, upstream_ports)
+  target, key = get_target_by_header(policy[BY_HEADER], upstreams)
   if target then
     kong.log(
       "rerouting request to target ", target.host, ":", target.port,
@@ -144,7 +163,7 @@ local function resolve_policy_target(policy, upstreams, upstream_ports, policy_n
     return target, key, policy_name .. "_header"
   end
 
-  target, key = get_target_by_query_param(policy[BY_QPARAM_NAME], upstreams, upstream_ports)
+  target, key = get_target_by_query_param(policy[BY_QPARAM_NAME], upstreams)
   if target then
     kong.log(
       "rerouting request to target ", target.host, ":", target.port,
@@ -193,28 +212,22 @@ function _M:access(cfg)
     return
   end
 
-  local upstream_ports = cfg.upstream_ports
-  if type(upstream_ports) ~= "table" then
-    kong.log("Missing upstream port map")
-    return
-  end
-
   local default_header_name = cfg.upstream_header_name or DEFAULT_UPSTREAM_HEADER_NAME
 
-  local target, key, reason = get_target_by_header(default_header_name, upstreams, upstream_ports)
+  local target, key, reason = get_target_by_header(default_header_name, upstreams)
   if target then
     kong.log("target found using default header: ", target.host, ":", target.port)
     set_target(target, "default_header", key)
     return
   end
 
-  target, key, reason = resolve_policy_target(cfg.access_policy, upstreams, upstream_ports, "access_policy")
+  target, key, reason = resolve_policy_target(cfg.access_policy, upstreams, "access_policy")
   if target then
     set_target(target, reason, key)
     return
   end
 
-  target, key, reason = resolve_policy_target(cfg.endpoint, upstreams, upstream_ports, "endpoint")
+  target, key, reason = resolve_policy_target(cfg.endpoint, upstreams, "endpoint")
   if target then
     set_target(target, reason, key)
     return
@@ -226,7 +239,7 @@ function _M:access(cfg)
       kong.service.request.set_header(CLIENT_ID_HEADER_NAME, client_id)
     end
 
-    target = get_target(upstreams, upstream_ports, client_id)
+    target = get_target(upstreams, client_id)
     if target then
       kong.log("rerouting request to target ", target.host, ":", target.port, " based on consumer.username ", client_id)
       set_target(target, "client_id", client_id)

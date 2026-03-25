@@ -35,8 +35,7 @@ Reason: upstream selection must happen before proxying, and after auth where con
 
 From `schema.lua`, required and key fields are:
 
-- `config.upstreams` (required map): selector key -> backend host
-- `config.upstream_ports` (required map): selector key -> backend port
+- `config.upstreams` (required map): selector key -> backend `host:port`
 - `config.upstream_header_name` (default `X-Upstream-Env`)
 
 ## 5. End-to-end request flow

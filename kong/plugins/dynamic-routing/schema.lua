@@ -13,16 +13,13 @@ return {
     { config = {
         type = "record",
         fields = {
-          -- Lookup table: selector value -> kong upstream name.
+          -- Lookup table: selector value -> backend target in `host:port` format.
+          -- Example:
+          -- upstreams = {
+          --   dev = "orders_api_dev:8080",
+          --   qa  = "orders_api_qa:8080",
+          -- }
           { upstreams = {
-              type = "map",
-              required = true,
-              len_min = 1,
-              keys = { type = "string" },
-              values = { type = "string", len_min = 1 },
-            }
-          },
-          { upstream_ports = {
               type = "map",
               required = true,
               len_min = 1,
